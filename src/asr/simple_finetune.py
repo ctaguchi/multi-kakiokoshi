@@ -19,11 +19,14 @@ import os
 import json
 from dataclasses import dataclass
 import dotenv
+from pathlib import Path
 
 
 dotenv.load_dotenv() # Load the .env variables
 
 
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_DIR = (BASE_DIR / ".." / ".." / "models").resolve()
 SSCLangs = [ # Languages to be trained with Spontaneous Speech Corpus data
     "aln", "bew", "bxk", "el-CY", "cgg", "hch", "kcn", "koo", "led", "lke",
     "lth", "meh", "mmc", "pne", "ruc", "rwm", "sco", "tob", "top", "ttj", "ukv",
@@ -484,7 +487,7 @@ def main(args: argparse.Namespace) -> None:
     wandb.login(key=wandb_api_key)
         
     training_args = TrainingArguments(
-        output_dir=args.repo_name,
+        output_dir=os.path.join(MODEL_DIR, args.repo_name),
         group_by_length=True,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=2,
@@ -499,6 +502,7 @@ def main(args: argparse.Namespace) -> None:
         warmup_steps=args.warmup_steps,
         save_total_limit=2,
         push_to_hub=args.push_to_hub,
+        push_to_hub_model_id=args.repo_name,
         hub_token=os.environ["HF_TOKEN"],
         report_to="wandb",
         run_name=args.wandb_run_name,
