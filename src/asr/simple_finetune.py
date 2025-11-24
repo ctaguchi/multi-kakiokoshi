@@ -248,21 +248,24 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
     `std_transcription` is rigorously standardized transcription by uroman,
     discarding some phonetically/orthographically important cues such as diacritics.
     """
-    def extract_chars(batch: dict) -> Dict[str, Any]:
-        segments: List[Dict[str, str | int]] = batch["segments"]
-        transcriptions = [seg["norm_transcription"] for seg in segments]
-        text = "".join(transcriptions)
-        return {"chars": transcriptions}
+    # def extract_chars(batch: dict) -> Dict[str, Any]:
+    #     segments: List[Dict[str, str | int]] = batch["segments"]
+    #     transcriptions = [seg["norm_transcription"] for seg in segments]
+    #     text = "".join(transcriptions)
+    #     return {"chars": transcriptions}
         
     train = datasetdict["train"]
     dev = datasetdict["dev"]
     dataset = concatenate_datasets([train, dev])
-    dataset_chars = dataset.map(extract_chars,
-                                num_proc=num_proc)
+    # dataset_chars = dataset.map(extract_chars,
+    #                             num_proc=num_proc)
     
     all_chars = set()
-    for chars in dataset_chars["chars"]:
-        all_chars.update(chars)
+    # for chars in dataset_chars["chars"]:
+    #     all_chars.update(chars)
+    for transcription in dataset["transcription"]:
+        all_chars.update(set(transcription))
+    
     vocab = {c: i for i, c in enumerate(all_chars)}
     vocab["|"] = len(vocab) # word delimiter token
     
