@@ -289,7 +289,7 @@ def prepare_dataset(batch: dict,
     ).input_values[0] # batched output is un-batched
 
     batch["input_length"] = len(batch["input_values"])
-    batch["labels"] = batch["text"]
+    batch["labels"] = batch["transcription"]
 
     return batch
 
