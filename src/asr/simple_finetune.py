@@ -415,7 +415,8 @@ def main(args: argparse.Namespace) -> None:
     
     vocab = get_vocab_from_dataset(datasetdict)
     # save vocab
-    vocab_file = os.path.join(args.repo_name, "vocab.json")
+    vocab_file = os.path.join(MODEL_DIR, args.repo_name, "vocab.json")
+    os.makedirs(vocab_file, exist_ok=True)
     with open(vocab_file, "w") as f:
         json.dump(vocab, f)
     
