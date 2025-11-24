@@ -12,6 +12,7 @@ import wandb
 import torch
 import jiwer
 import numpy as np
+import huggingface_hub
 
 import argparse
 from typing import List, Dict, Any, Union, Optional
@@ -23,6 +24,7 @@ from pathlib import Path
 
 
 dotenv.load_dotenv() # Load the .env variables
+huggingface_hub.login(token=os.environ["HF_TOKEN"])
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -167,8 +169,7 @@ def get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_data(language: str,
-              api_key: Optional[str] = None) -> DatasetDict:
+def load_data(language: str) -> DatasetDict:
     """Load dataset.
     
     Args:
@@ -180,8 +181,7 @@ def load_data(language: str,
         # load from huggingface
         dataset_name = f"mcv-sps-{language}-segmented"
         dataset = load_dataset(f"{USERNAME}/{dataset_name}",
-                               split="train",
-                               api_key=api_key)
+                               split="train")
         
         # train-dev split
         train_data = dataset.filter(lambda sample: sample["split"] == "train")
@@ -395,8 +395,7 @@ def make_compute_metrics(processor: Wav2Vec2Processor):
 
 def main(args: argparse.Namespace) -> None:
     """Main function."""
-    datasetdict = load_data(args.language,
-                            api_key=os.environ["HF_TOKEN"])
+    datasetdict = load_data(args.language)
     train = datasetdict["train"]
     dev = datasetdict["dev"]
     
