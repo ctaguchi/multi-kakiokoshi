@@ -459,7 +459,7 @@ def main(args: argparse.Namespace) -> None:
     datasetdict = datasetdict.map(prepare_dataset,
                                   fn_kwargs={"augmentor": augmentor,
                                              "processor": processor},
-                                  remove_columns=datasetdict.column_names)
+                                  remove_columns=datasetdict["train"].column_names)
     
     data_collator = DataCollatorCTCWithPadding(
         processor=processor,
