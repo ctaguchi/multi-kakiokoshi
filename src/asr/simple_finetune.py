@@ -13,6 +13,8 @@ import torch
 import jiwer
 import numpy as np
 import huggingface_hub
+import re
+import unicodedata
 
 import argparse
 from typing import List, Dict, Any, Union, Optional
@@ -239,6 +241,38 @@ def batch_collapse_segments(batch: Dict[str, Any]) -> Dict[str, Any]:
     
     return {"audio": new_audio,
             "transcription": new_texts}
+    
+APOSTROPHES = "'’ʻʼ`"
+ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
+
+def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Regex-based text normalization:
+    - Lowercase
+    - Keep Latin, Greek, combining marks, apostrophes, breve, and tonos
+    - Remove everything else
+    """
+    def clean(text: str) -> str:
+        if text is None:
+            return ""
+
+        # Lowercase
+        text = text.lower()
+
+        # Normalize to NFD so regex can see combining marks
+        text = unicodedata.normalize("NFD", text)
+
+        # Remove all disallowed characters
+        text = re.sub(ALLOWED_CHARS, "", text)
+
+        # Re-compose
+        text = unicodedata.normalize("NFC", text)
+
+        return text
+
+    # Apply to all transcriptions in batch
+    batch["transcription"] = [clean(t) for t in batch["transcription"]]
+    return batch
 
 
 def get_vocab_from_dataset(datasetdict: DatasetDict,
@@ -267,7 +301,12 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
         all_chars.update(set(transcription))
     
     vocab = {c: i for i, c in enumerate(all_chars)}
-    vocab["|"] = len(vocab) # word delimiter token
+    vocab["|"] = vocab[" "]
+    del vocab[" "]
+    
+    # CTC special tokens
+    vocab["[UNK]"] = len(vocab)
+    vocab["[PAD]"] = len(vocab)
     
     return vocab
 
@@ -423,8 +462,8 @@ def main(args: argparse.Namespace) -> None:
     
     tokenizer = Wav2Vec2CTCTokenizer(
         vocab_file=vocab_file,
-        # unk_token="[UNK]",
-        # pad_token="[PAD]",
+        unk_token="[UNK]",
+        pad_token="[PAD]",
         word_delimiter_token="|"
     )
     
