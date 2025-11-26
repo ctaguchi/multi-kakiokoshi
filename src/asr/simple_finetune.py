@@ -450,6 +450,10 @@ def main(args: argparse.Namespace) -> None:
     dev = dev.map(lambda x: x,
                   remove_columns=["segments"]) # we are not using segments for dev data
     
+    # Text normalization
+    train = train.map(normalize_text)
+    dev = dev.map(normalize_text)
+    
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
     vocab = get_vocab_from_dataset(datasetdict)
