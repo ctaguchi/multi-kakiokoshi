@@ -271,9 +271,6 @@ def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
 
         # Re-compose
         text = unicodedata.normalize("NFC", text)
-        
-        # word-delimiter token
-        text = text.replace(" ", "|")
 
         return text
 
@@ -324,6 +321,9 @@ def prepare_dataset(batch: dict,
     """Prepare the dataset for the training.
     Add `input_values` and `labels` to the dataset.
     """
+    # word-delimiter token
+    batch["transcription"] = batch["transcription"].replace(" ", "|")
+    
     audio = batch["audio"]
     if augmentor is not None: # data augmentation
         audio["array"] = augmentor(samples=audio["array"],
