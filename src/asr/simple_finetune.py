@@ -435,7 +435,7 @@ def make_compute_metrics(processor: Wav2Vec2Processor):
         table = wandb.Table(columns=["prediction", "reference"])
         for p, r in list(zip(pred_str, label_str))[:max_examples_to_log]:
             table.add_data(p, r)
-        wandb.log({"val/examples": table})
+        wandb.log({"eval/examples": table})
 
         return {"cer": cer, "wer": wer}
 
@@ -444,10 +444,13 @@ def make_compute_metrics(processor: Wav2Vec2Processor):
 
 def main(args: argparse.Namespace) -> None:
     """Main function."""
+    print("Loading data...")
     datasetdict = load_data(args.language)
     train = datasetdict["train"]
     dev = datasetdict["dev"]
+    print("Data loaded.")
     
+    print("Collapsing segments...")
     train = train.map(batch_collapse_segments,
                       batched=True,
                       batch_size=16,
@@ -456,15 +459,19 @@ def main(args: argparse.Namespace) -> None:
     # The total number of samples can reach around 10k
     dev = dev.map(lambda x: x,
                   remove_columns=["segments"]) # we are not using segments for dev data
+    print("Segments collapsed.")
     
     # Text normalization
+    print("Normalizing the text...")
     train = train.map(normalize_text,
                       batched=True)
     dev = dev.map(normalize_text,
                   batched=True)
+    print("Text normalized.")
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
+    print("Creating the vocab...")
     vocab = get_vocab_from_dataset(datasetdict)
     # save vocab
     model_dir = os.path.join(MODEL_DIR, args.repo_name)
@@ -472,14 +479,18 @@ def main(args: argparse.Namespace) -> None:
     os.makedirs(model_dir, exist_ok=True)
     with open(vocab_file, "w") as f:
         json.dump(vocab, f)
+    print("Vocab created.")
     
+    print("Preparing the tokenizer...")
     tokenizer = Wav2Vec2CTCTokenizer(
         vocab_file=vocab_file,
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|"
     )
+    print("Tokenizer prepared.")
     
+    print("Defining the feature extractor...")
     feature_extractor = Wav2Vec2FeatureExtractor(
         feature_size=1,
         sampling_rate=16000,
@@ -487,11 +498,14 @@ def main(args: argparse.Namespace) -> None:
         do_normalize=True,
         return_attention_mask=True
     )
+    print("Feature extractor defined.")
     
+    print("Defining the processor...")
     processor = Wav2Vec2Processor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer
     )
+    print("Processor defined.")
     
     if (args.pitch_shift or args.add_background_noise or args.time_stretch):
         augment_methods = [
@@ -508,10 +522,12 @@ def main(args: argparse.Namespace) -> None:
     else:
         augmentor = None
     
+    print("Formatting the dataset for training...")
     datasetdict = datasetdict.map(prepare_dataset,
                                   fn_kwargs={"augmentor": augmentor,
                                              "processor": processor},
                                   remove_columns=datasetdict["train"].column_names)
+    print("Dataset formatted.")
     
     print("*** DEBUG ***")
     sample = datasetdict["train"][0]
@@ -584,6 +600,7 @@ def main(args: argparse.Namespace) -> None:
         tokenizer=processor.feature_extractor,
     )
     
+    print("Training started.")
     trainer.train()
     trainer.save_model()
     
