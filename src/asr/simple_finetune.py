@@ -504,6 +504,14 @@ def main(args: argparse.Namespace) -> None:
                                              "processor": processor},
                                   remove_columns=datasetdict["train"].column_names)
     
+    print("*** DEBUG ***")
+    sample = datasetdict["train"][0]
+    print(sample["labels"])
+    print(processor(
+        text=[sample["labels"]],
+        return_tensors="pt"
+    ).input_ids)
+    
     data_collator = DataCollatorCTCWithPadding(
         processor=processor,
         padding=True
