@@ -13,7 +13,7 @@ import torch
 import jiwer
 import numpy as np
 import huggingface_hub
-import re
+import regex
 import unicodedata
 
 import argparse
@@ -244,6 +244,9 @@ def batch_collapse_segments(batch: Dict[str, Any]) -> Dict[str, Any]:
     
 APOSTROPHES = "'’ʻʼ`"
 ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
+ALLOWED_CHARS_PATTERN = regex.compile(
+    rf"[^\p{{Latin}}\p{{Greek}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
+)
 
 def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -263,7 +266,8 @@ def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
         text = unicodedata.normalize("NFD", text)
 
         # Remove all disallowed characters
-        text = re.sub(ALLOWED_CHARS, "", text)
+        # text = re.sub(ALLOWED_CHARS, "", text)
+        text = ALLOWED_CHARS_PATTERN.sub("", text)
 
         # Re-compose
         text = unicodedata.normalize("NFC", text)
@@ -451,8 +455,10 @@ def main(args: argparse.Namespace) -> None:
                   remove_columns=["segments"]) # we are not using segments for dev data
     
     # Text normalization
-    train = train.map(normalize_text)
-    dev = dev.map(normalize_text)
+    train = train.map(normalize_text,
+                      batched=True)
+    dev = dev.map(normalize_text,
+                  batched=True)
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
