@@ -207,6 +207,16 @@ def load_data(language: str) -> DatasetDict:
     return datasetdict
 
 
+def is_short_enough(sample: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove samples that are too long.
+    Important because dev set audios are not segmented.
+    """
+    sr = sample["audio"]["sampling_rate"]
+    n_samples = len(sample["audio"]["array"])
+    duration_sec = n_samples / sr
+    return duration_sec <= 60.0
+
+
 def batch_collapse_segments(batch: Dict[str, Any]) -> Dict[str, Any]:
     """Collapse the segments as samples,
     for batch processing with `.map()`."""
@@ -459,6 +469,7 @@ def main(args: argparse.Namespace) -> None:
     # The total number of samples can reach around 10k
     dev = dev.map(lambda x: x,
                   remove_columns=["segments"]) # we are not using segments for dev data
+    dev = dev.filter(is_short_enough)
     print("Segments collapsed.")
     
     # Text normalization
@@ -582,7 +593,7 @@ def main(args: argparse.Namespace) -> None:
         warmup_steps=args.warmup_steps,
         save_total_limit=2,
         push_to_hub=args.push_to_hub,
-        push_to_hub_model_id=args.repo_name,
+        hub_model_id=args.repo_name,
         hub_token=os.environ["HF_TOKEN"],
         report_to="wandb",
         run_name=args.wandb_run_name,
