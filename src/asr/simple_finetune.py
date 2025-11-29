@@ -271,6 +271,9 @@ def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
 
         # Re-compose
         text = unicodedata.normalize("NFC", text)
+        
+        # word-delimiter token
+        text = text.replace(" ", "|")
 
         return text
 
