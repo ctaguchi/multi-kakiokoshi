@@ -380,6 +380,7 @@ def combine_segments_in_dataset(dataset: Dataset,
                         start_idx = i + 1
                         start_t = segments[start_idx]["start"]
     
+    combined_dataset = Dataset.from_list(combined_dataset)
     return combined_dataset
 
     
