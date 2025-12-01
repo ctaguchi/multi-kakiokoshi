@@ -22,6 +22,7 @@ import numpy as np
 import huggingface_hub
 import regex
 import unicodedata
+import torch.nn as nn
 
 import argparse
 from typing import List, Dict, Any, Union, Optional
@@ -127,6 +128,11 @@ def get_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Run name to be shown on wandb."
+    )
+    parser.add_argument(
+        "--replace_ctc",
+        action="store_true",
+        help="Replace the CTC layer (when the pretrained model already has a trained CTC)"
     )
     
     # Data augmentation
@@ -715,6 +721,9 @@ def main(args: argparse.Namespace) -> None:
         padding=True
     )
     
+    ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
+    new_vocab_size = len(processor.tokenizer)
+        
     model = Wav2Vec2ForCTC.from_pretrained(
         args.model,
         attention_dropout=0.0,
@@ -724,8 +733,15 @@ def main(args: argparse.Namespace) -> None:
         layerdrop=0.0,
         ctc_loss_reduction="mean",
         pad_token_id=processor.tokenizer.pad_token_id,
-        vocab_size=len(processor.tokenizer),
+        vocab_size=new_vocab_size,
+        ignore_mismatched_sizes=ignore_mismatched_sizes
     )
+    
+    # Replace/resize CTC head if necessary
+    if ignore_mismatched_sizes and args.replace_ctc:
+        in_features = model.lm_head.in_features
+        model.lm_head = nn.Linear(in_features, new_vocab_size)
+        model.config.vocab_size = new_vocab_size
     
     if args.freeze_feature_encoder:
         model.freeze_feature_encoder() # prevents overfitting, faster training
