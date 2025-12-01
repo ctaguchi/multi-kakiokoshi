@@ -1,9 +1,10 @@
 # TODO:
 # - Language-specific digraphs to the vocab
 # - DONE: Remove empty text samples
-# - Concatenate samples when segments are too short
-# - Implement a training cycle with combined segments
-# - Prepare a segmented dev version to compare the performance against the longer version
+# - (Optional) Concatenate samples when segments are too short
+# - DONE: Implement a training cycle with combined segments
+# - (Optional) Prepare a segmented dev version to compare the performance against the longer version
+# - Implement a character-level language model with pyctcdecode
 
 from datasets import load_dataset, Dataset, DatasetDict, concatenate_datasets
 from transformers import (
@@ -232,8 +233,9 @@ def load_data(language: str) -> DatasetDict:
             remove_columns=DISCARDED_COLUMNS
         )
     elif args.language in CVLangs:
-        # Load from common voice locally
-        raise NotImplementedError
+        # Load from common voice
+        dataset_name = f"common_voice_{language}"
+        datasetdict = load_dataset(f"{USERNAME}/{dataset_name}")
     else:
         raise ValueError(f"{args.language} is not a supported language for this experiment.")
 
