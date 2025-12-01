@@ -30,6 +30,7 @@ import json
 from dataclasses import dataclass
 import dotenv
 from pathlib import Path
+import warnings
 
 
 dotenv.load_dotenv() # Load the .env variables
@@ -451,13 +452,13 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
         if language == "aln":
             digraphs = {"sh", "dh", "rr", "ll",} # add more if necessary
         else:
-            raise NotImplementedError # TODO
+            warnings.warn("Digraphs are not defined for the language. Fallback to default vocab.")
+            digraphs = {}
         all_chars.update(digraphs)
     
     vocab = {c: i for i, c in enumerate(all_chars)}
     vocab["|"] = vocab[" "]
     del vocab[" "]
-            
     
     # CTC special tokens
     vocab["[UNK]"] = len(vocab)
@@ -601,6 +602,18 @@ def main(args: argparse.Namespace) -> None:
     dev = datasetdict["dev"]
     print("Data loaded.")
     
+    # Make a longer version
+    if args.train_with_longer_samples:
+        long_train = combine_segments_in_dataset(
+            dataset=train,
+            combine_last=True,
+            min_length=5
+        )
+        # Sample cleaning
+        long_train = long_train.filter(has_transcription)
+        long_train = long_train.map(normalize_text,
+                                    batched=True)
+    
     print("Collapsing segments...")
     train = train.map(batch_collapse_segments,
                       batched=True,
@@ -625,14 +638,6 @@ def main(args: argparse.Namespace) -> None:
     dev = dev.map(normalize_text,
                   batched=True)
     print("Text normalized.")
-    
-    # Make a longer version
-    if args.train_with_longer_samples:
-        long_train = combine_segments_in_dataset(
-            dataset=train,
-            combine_last=True,
-            min_length=5
-        )
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
