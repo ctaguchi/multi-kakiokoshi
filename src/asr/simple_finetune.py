@@ -135,6 +135,11 @@ def get_args() -> argparse.Namespace:
         action="store_true",
         help="Replace the CTC layer (when the pretrained model already has a trained CTC)"
     )
+    parser.add_argument(
+        "--maximize_training_data",
+        action="store_true",
+        help="If set, the dataset loader will use as much data as possible, leaving only 1000 samples for evaluation."
+    )
     
     # Data augmentation
     parser.add_argument(
@@ -607,33 +612,49 @@ def main(args: argparse.Namespace) -> None:
     """Main function."""
     print("Loading data...")
     datasetdict = load_data(args.language)
-    train = datasetdict["train"]
-    dev = datasetdict["dev"]
-    print("Data loaded.")
     
-    # Make a longer version
-    if args.train_with_longer_samples:
-        long_train = combine_segments_in_dataset(
-            dataset=train,
-            combine_last=True,
-            min_length=5
-        )
-        # Sample cleaning
-        long_train = long_train.filter(has_transcription)
-        long_train = long_train.map(normalize_text,
-                                    batched=True)
+    if args.language in SSCLangs:
+        train = datasetdict["train"]
+        dev = datasetdict["dev"]
+        print("Data loaded.")
+        
+        # Make a longer version
+        if args.train_with_longer_samples:
+            long_train = combine_segments_in_dataset(
+                dataset=train,
+                combine_last=True,
+                min_length=5
+            )
+            # Sample cleaning
+            long_train = long_train.filter(has_transcription)
+            long_train = long_train.map(normalize_text,
+                                        batched=True)
+        
+        print("Collapsing segments...")
+        train = train.map(batch_collapse_segments,
+                        batched=True,
+                        batch_size=16,
+                        num_proc=4,
+                        remove_columns=train.column_names) # should take about 5 mins, and the memory should be ok within 12.7GB
+        # The total number of samples can reach around 10k
+        dev = dev.map(lambda x: x,
+                    remove_columns=["segments"]) # we are not using segments for dev data
+        dev = dev.filter(is_short_enough)
+        print("Segments collapsed.")
     
-    print("Collapsing segments...")
-    train = train.map(batch_collapse_segments,
-                      batched=True,
-                      batch_size=16,
-                      num_proc=4,
-                      remove_columns=train.column_names) # should take about 5 mins, and the memory should be ok within 12.7GB
-    # The total number of samples can reach around 10k
-    dev = dev.map(lambda x: x,
-                  remove_columns=["segments"]) # we are not using segments for dev data
-    dev = dev.filter(is_short_enough)
-    print("Segments collapsed.")
+    elif args.language in CVLangs:
+        train = datasetdict["train"]
+        dev = datasetdict["dev"]
+        if args.maximize_training_data:
+            # just leave 1000 samples for dev and test
+            threshold = min(1000, len(dev) * 0.5)
+            test = datasetdict["test"]
+            other = datasetdict["other"]
+            dev_train = Dataset.from_dict(dev[threshold:])
+            dev = Dataset.from_dict(dev[:threshold])
+            test_train = Dataset.from_dict(test[threshold:])
+            test = Dataset.from_dict(test[:threshold])
+            train = concatenate_datasets([train, dev_train, test_train, other])
     
     # Sample cleaning
     train = train.filter(has_transcription)
