@@ -1,3 +1,10 @@
+# TODO:
+# - Language-specific digraphs to the vocab
+# - DONE: Remove empty text samples
+# - Concatenate samples when segments are too short
+# - Implement a training cycle with combined segments
+# - Prepare a segmented dev version to compare the performance against the longer version
+
 from datasets import load_dataset, Dataset, DatasetDict, concatenate_datasets
 from transformers import (
     Wav2Vec2ForCTC,
@@ -168,6 +175,25 @@ def get_args() -> argparse.Namespace:
         help="Maximum rate for time stretch.",
     )
     
+    # Sample combination for adapting to longer data
+    parser.add_argument(
+        "--train_with_longer_samples",
+        action="store_true",
+        help="Additional training with combined samples to form longer segments."
+    )
+    parser.add_argument(
+        "--long_batch_size",
+        type=int,
+        default=4,
+        help="Batch size for the second training with longer samples."
+    )
+    parser.add_argument(
+        "--long_epoch",
+        type=int,
+        default=5,
+        help="Number of epochs for the second traiing with longer samples."
+    )
+    
     return parser.parse_args()
 
 
@@ -207,7 +233,7 @@ def load_data(language: str) -> DatasetDict:
     return datasetdict
 
 
-def is_short_enough(sample: Dict[str, Any]) -> Dict[str, Any]:
+def is_short_enough(sample: Dict[str, Any]) -> bool:
     """Remove samples that are too long.
     Important because dev set audios are not segmented.
     """
@@ -215,6 +241,11 @@ def is_short_enough(sample: Dict[str, Any]) -> Dict[str, Any]:
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
     return duration_sec <= 60.0
+
+
+def has_transcription(sample: Dict[str, Any]) -> bool:
+    """Remove samples that have no transcription."""
+    return len(sample["transcription"].strip()) > 0
 
 
 def batch_collapse_segments(batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -251,6 +282,105 @@ def batch_collapse_segments(batch: Dict[str, Any]) -> Dict[str, Any]:
     
     return {"audio": new_audio,
             "transcription": new_texts}
+    
+
+def combine_segments(dataset: Dataset,
+                     sample_idx: int,
+                     start_idx: int,
+                     end_idx: int):
+    """Combine neighboring samples in the specified range."""
+    sample = dataset[sample_idx]
+    audio = sample["audio"]["array"]
+    sr = sample["audio"]["sampling_rate"]
+    
+    start_segment = sample["segments"][start_idx]
+    start_t = start_segment["start"]
+    
+    end_segment = sample["segments"][end_idx]
+    end_t = end_segment["end"]
+    text = " ".join([sample["segments"][i]["norm_transcription"] for i in range(start_idx, end_idx + 1)])
+    start_sample = int(start_t * sr)
+    end_sample = int(end_t * sr)
+    segment_audio = audio[start_sample:end_sample]
+    return segment_audio, sr, text
+
+
+def combine_segments_in_dataset(dataset: Dataset,
+                                combine_last: bool = True,
+                                width: Optional[int] = None,
+                                min_length: Optional[int] = None) -> Dataset:
+    """Combine samples in a dataset to form longer samples.
+    Args:
+        dataset (Dataset): the dataset.
+        combine_end (bool): whether to combine the remaining segments with the previous.
+        width (Optional[int]): Number of segments to combine
+        min_length:
+    """
+    assert width or min_length, "Specify the sample merging strategy."
+    assert not (width and min_length), "`width` and `min_length` cannot be combined."
+    
+    combined_dataset = []
+    if width:
+        for sample_idx, sample in enumerate(dataset):
+            for i in range(0, len(sample["segments"]), width):
+                if i + width - 1 > len(sample["segments"]) - 1 and combine_last: # combine the last one
+                    end_idx = len(sample["segments"]) - 1
+                    start_idx = max(0, i - width)
+                    combined_dataset.pop()
+                else:
+                    end_idx = i + width - 1
+                    start_idx = i
+                    
+                segment_audio, sr, text = combine_segments(
+                    dataset=dataset,
+                    sample_idx=sample_idx,
+                    start_idx=start_idx,
+                    end_idx=end_idx
+                )
+                    
+                combined_dataset.append(
+                    {
+                        "audio": {"array": segment_audio, "sampling_rate": sr},
+                        "transcription": text,
+                        "length": len(segment_audio) / sr
+                    }
+                )
+    
+    elif min_length:
+        for sample_idx, sample in enumerate(dataset):
+            segments = sample["segments"]
+            prev_start_idx = 0
+            start_idx = 0
+            start_t = segments[start_idx]["start"]
+            
+            for i in range(len(segments)):
+                end_t = sample["segments"][i]["end"]
+                if end_t - start_t > min_length or i == len(segments) - 1:
+                    if i == len(segments) - 1 and combine_last:
+                        start_idx = prev_start_idx
+                        combined_dataset.pop() # remove the previous segment
+                        
+                    segment_audio, sr, text = combine_segments(
+                        dataset=dataset,
+                        sample_idx=sample_idx,
+                        start_idx=start_idx,
+                        end_idx=i
+                    )
+                    combined_dataset.append(
+                        {
+                            "audio": {"array": segment_audio, "sampling_rate": sr},
+                            "transcription": text,
+                            "length": len(segment_audio) / sr # debug
+                        }
+                    )
+                    
+                    if i < len(segments) - 1:
+                        prev_start_idx = start_idx
+                        start_idx = i + 1
+                        start_t = segments[start_idx]["start"]
+    
+    return combined_dataset
+
     
 APOSTROPHES = "'’ʻʼ`"
 ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
@@ -290,7 +420,8 @@ def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_vocab_from_dataset(datasetdict: DatasetDict,
-                           num_proc: int = 1) -> Dict[str, int]:
+                           orthographic: bool = True,
+                           language: Optional[str] = None) -> Dict[str, int]:
     """Create a vocab dict from the dataset.
     For the SSC datasets, use the normalized transcription `norm_transcription`.
     `std_transcription` is rigorously standardized transcription by uroman,
@@ -313,10 +444,20 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
     #     all_chars.update(chars)
     for transcription in dataset["transcription"]:
         all_chars.update(set(transcription))
+        
+    # orthographic digraphs
+    if orthographic:
+        assert language is not None, "`language` arg needs to be specified when orthographic=True.`"
+        if language == "aln":
+            digraphs = {"sh", "dh", "rr", "ll",} # add more if necessary
+        else:
+            raise NotImplementedError # TODO
+        all_chars.update(digraphs)
     
     vocab = {c: i for i, c in enumerate(all_chars)}
     vocab["|"] = vocab[" "]
     del vocab[" "]
+            
     
     # CTC special tokens
     vocab["[UNK]"] = len(vocab)
@@ -472,6 +613,11 @@ def main(args: argparse.Namespace) -> None:
     dev = dev.filter(is_short_enough)
     print("Segments collapsed.")
     
+    # Sample cleaning
+    train = train.filter(has_transcription)
+    dev = dev.filter(has_transcription)
+    print("Samples with an empty transcription removed.")
+    
     # Text normalization
     print("Normalizing the text...")
     train = train.map(normalize_text,
@@ -479,6 +625,14 @@ def main(args: argparse.Namespace) -> None:
     dev = dev.map(normalize_text,
                   batched=True)
     print("Text normalized.")
+    
+    # Make a longer version
+    if args.train_with_longer_samples:
+        long_train = combine_segments_in_dataset(
+            dataset=train,
+            combine_last=True,
+            min_length=5
+        )
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
@@ -576,9 +730,10 @@ def main(args: argparse.Namespace) -> None:
         print(e)
     
     wandb.login(key=wandb_api_key)
-        
+    
+    output_dir = os.path.join(MODEL_DIR, args.repo_name)
     training_args = TrainingArguments(
-        output_dir=os.path.join(MODEL_DIR, args.repo_name),
+        output_dir=output_dir,
         group_by_length=True,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=2,
@@ -613,8 +768,45 @@ def main(args: argparse.Namespace) -> None:
     
     print("Training started.")
     trainer.train()
-    trainer.save_model()
+    trainer.save_model() # will be saved to `output_dir`
     
+    if args.train_with_longer_samples:
+        print("First Training finished.")
+        print("Starting the training with the long dataset.")
+        training_args_long = TrainingArguments(
+            output_dir=output_dir,
+            group_by_length=True,
+            per_device_train_batch_size=args.long_batch_size,
+            gradient_accumulation_steps=2,
+            eval_strategy="steps",
+            num_train_epochs=args.long_epoch,
+            gradient_checkpointing=True,
+            fp16=True,
+            save_steps=100,
+            eval_steps=100,
+            logging_steps=100,
+            learning_rate=args.learning_rate,
+            warmup_steps=args.warmup_steps,
+            save_total_limit=2,
+            push_to_hub=args.push_to_hub,
+            hub_model_id=args.repo_name,
+            hub_token=os.environ["HF_TOKEN"],
+            report_to="wandb",
+            run_name=args.wandb_run_name,
+            load_best_model_at_end=True,
+        )
+        model = Wav2Vec2ForCTC.from_pretrained(output_dir)
+        trainer_long = Trainer(
+            model=model,
+            data_collator=data_collator,
+            args=training_args_long,
+            compute_metrics=compute_metrics,
+            train_dataset=datasetdict["train"],
+            eval_dataset=datasetdict["dev"],
+            tokenizer=processor.feature_extractor,
+        )
+        trainer_long.train()
+        trainer_long.save_model()
 
 if __name__ == "__main__":
     args = get_args()
