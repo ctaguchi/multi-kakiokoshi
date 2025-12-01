@@ -643,7 +643,9 @@ def main(args: argparse.Namespace) -> None:
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
     print("Creating the vocab...")
-    vocab = get_vocab_from_dataset(datasetdict)
+    vocab = get_vocab_from_dataset(datasetdict,
+                                   language=args.language,
+                                   orthographic=True)
     # save vocab
     model_dir = os.path.join(MODEL_DIR, args.repo_name)
     vocab_file = os.path.join(model_dir, "vocab.json")
