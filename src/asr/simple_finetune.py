@@ -494,7 +494,7 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
         assert language is not None, "`language` arg needs to be specified when orthographic=True.`"
         with open("src/utils/digraphs.json", "r") as f:
             digraphs_all = json.load(f)
-        if language not in digraphs_all.key():
+        if language not in digraphs_all.keys():
             warnings.warn("Digraphs are not defined for the language. Fallback to default vocab.")
             digraphs = {}
         else:
