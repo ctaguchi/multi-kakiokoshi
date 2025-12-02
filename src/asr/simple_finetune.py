@@ -125,6 +125,12 @@ def get_args() -> argparse.Namespace:
         help="If set, the model will be pushed to Hugging Face."
     )
     parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default=os.environ["WANDB_PROJECT"] if os.environ["WANDB_PROJECT"] else None,
+        help="WandB project name. Default to the project name set as an env variable."
+    )
+    parser.add_argument(
         "--wandb_run_name",
         type=str,
         default=None,
