@@ -284,7 +284,7 @@ def is_short_enough(sample: Dict[str, Any]) -> bool:
     sr = sample["audio"]["sampling_rate"]
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
-    return duration_sec <= 60.0
+    return duration_sec <= 30.0
 
 
 def has_transcription(sample: Dict[str, Any]) -> bool:
