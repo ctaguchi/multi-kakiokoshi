@@ -797,7 +797,7 @@ def main(args: argparse.Namespace) -> None:
         push_to_hub=args.push_to_hub,
         hub_model_id=args.repo_name,
         hub_token=os.environ["HF_TOKEN"],
-        report_to="wandb",
+        report_to=["wandb"],
         run_name=args.wandb_run_name,
         load_best_model_at_end=True,
     )
@@ -814,6 +814,7 @@ def main(args: argparse.Namespace) -> None:
     )
     
     print("Training started.")
+    run = wandb.init(project=args.wandb_project, name=args.wandb_run_name)
     trainer.train()
     trainer.save_model() # will be saved to `output_dir`
     
@@ -838,7 +839,7 @@ def main(args: argparse.Namespace) -> None:
             push_to_hub=args.push_to_hub,
             hub_model_id=args.repo_name,
             hub_token=os.environ["HF_TOKEN"],
-            report_to="wandb",
+            report_to=["wandb"],
             run_name=args.wandb_run_name,
             load_best_model_at_end=True,
         )
@@ -854,6 +855,8 @@ def main(args: argparse.Namespace) -> None:
         )
         trainer_long.train()
         trainer_long.save_model()
+        
+    wandb.finish()
 
 if __name__ == "__main__":
     args = get_args()
