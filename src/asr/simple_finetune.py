@@ -858,7 +858,7 @@ def main(args: argparse.Namespace) -> None:
             num_train_epochs=args.long_epoch,
             gradient_checkpointing=True,
             fp16=True,
-            save_steps=100,
+            save_steps=args.save_steps,
             eval_steps=args.eval_steps,
             logging_steps=args.logging_steps,
             learning_rate=args.learning_rate,
