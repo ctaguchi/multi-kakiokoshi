@@ -6,7 +6,7 @@
 # - (Optional) Prepare a segmented dev version to compare the performance against the longer version
 # - Implement a character-level language model with pyctcdecode
 
-from datasets import load_dataset, Dataset, DatasetDict, concatenate_datasets
+from datasets import load_dataset, Dataset, DatasetDict, Audio, concatenate_datasets
 from transformers import (
     Wav2Vec2ForCTC,
     Wav2Vec2CTCTokenizer,
@@ -666,10 +666,10 @@ def main(args: argparse.Namespace) -> None:
             threshold = min(1000, len(dev) * 0.5)
             test = datasetdict["test"]
             other = datasetdict["other"]
-            dev_train = Dataset.from_dict(dev[threshold:])
-            dev = Dataset.from_dict(dev[:threshold])
-            test_train = Dataset.from_dict(test[threshold:])
-            test = Dataset.from_dict(test[:threshold])
+            dev_train = Dataset.from_dict(dev[threshold:]).cast_column("audio", Audio(sampling_rate=16000))
+            dev = Dataset.from_dict(dev[:threshold]).cast_column("audio", Audio(sampling_rate=16000))
+            test_train = Dataset.from_dict(test[threshold:]).cast_column("audio", Audio(sampling_rate=16000))
+            test = Dataset.from_dict(test[:threshold]).cast_column("audio", Audio(sampling_rate=16000))
             train = concatenate_datasets([train, dev_train, test_train, other])
     
     # Sample cleaning
