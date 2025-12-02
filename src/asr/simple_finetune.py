@@ -428,7 +428,8 @@ def combine_segments_in_dataset(dataset: Dataset,
 
     
 APOSTROPHES = "'’ʻʼ`"
-ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{Cyrillic}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
+DIACRITICS = "\u0301\u0300\u0302\u030C\u0304" # For Mazahua
+ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{Cyrillic}}\p{{M}}{APOSTROPHES}{DIACRITICS}\u0306\u0384 ]+"
 ALLOWED_CHARS_PATTERN = regex.compile(ALLOWED_CHARS)
 
 def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -491,7 +492,7 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
     # orthographic digraphs
     if orthographic:
         assert language is not None, "`language` arg needs to be specified when orthographic=True.`"
-        with open("digraphs.json", "r") as f:
+        with open("src/utils/digraphs.json", "r") as f:
             digraphs_all = json.load(f)
         if language not in digraphs_all.key():
             warnings.warn("Digraphs are not defined for the language. Fallback to default vocab.")
