@@ -33,6 +33,7 @@ from dataclasses import dataclass
 import dotenv
 from pathlib import Path
 import warnings
+import gc
 
 
 dotenv.load_dotenv() # Load the .env variables
@@ -836,6 +837,12 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_longer_samples:
         print("First Training finished.")
+        # the first trainer won't be used in this stage
+        del trainer
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        
         print("Starting the training with the long dataset.")
         training_args_long = TrainingArguments(
             output_dir=output_dir,
@@ -865,7 +872,7 @@ def main(args: argparse.Namespace) -> None:
             data_collator=data_collator,
             args=training_args_long,
             compute_metrics=compute_metrics,
-            train_dataset=datasetdict["train"],
+            train_dataset=long_train, # make sure to use the longer version
             eval_dataset=datasetdict["dev"],
             tokenizer=processor.feature_extractor,
         )
