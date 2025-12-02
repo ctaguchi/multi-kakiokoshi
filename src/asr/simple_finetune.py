@@ -398,10 +398,8 @@ def combine_segments_in_dataset(dataset: Dataset,
 
     
 APOSTROPHES = "'’ʻʼ`"
-ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
-ALLOWED_CHARS_PATTERN = regex.compile(
-    rf"[^\p{{Latin}}\p{{Greek}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
-)
+ALLOWED_CHARS = fr"[^\p{{Latin}}\p{{Greek}}\p{{Cyrillic}}\p{{M}}{APOSTROPHES}\u0306\u0384 ]+"
+ALLOWED_CHARS_PATTERN = regex.compile(ALLOWED_CHARS)
 
 def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
     """
