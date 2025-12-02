@@ -120,6 +120,18 @@ def get_args() -> argparse.Namespace:
         help="Warm up steps."
     )
     parser.add_argument(
+        "--eval_steps",
+        type=int,
+        default=200,
+        help="Evaluation steps."
+    )
+    parser.add_argument(
+        "--logging_steps",
+        type=int,
+        default=100,
+        help="Training logging steps."
+    )
+    parser.add_argument(
         "--push_to_hub",
         action="store_true",
         help="If set, the model will be pushed to Hugging Face."
@@ -835,8 +847,8 @@ def main(args: argparse.Namespace) -> None:
             gradient_checkpointing=True,
             fp16=True,
             save_steps=100,
-            eval_steps=100,
-            logging_steps=100,
+            eval_steps=args.eval_steps,
+            logging_steps=args.logging_steps,
             learning_rate=args.learning_rate,
             warmup_steps=args.warmup_steps,
             save_total_limit=2,
