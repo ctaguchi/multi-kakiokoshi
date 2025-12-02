@@ -231,6 +231,11 @@ def get_args() -> argparse.Namespace:
         default=5,
         help="Number of epochs for the second traiing with longer samples."
     )
+    parser.add_argument(
+        "--mix_long_short",
+        action="store_true",
+        help="If set, mix the short segments and combined segments."
+    )
     
     return parser.parse_args()
 
@@ -486,11 +491,14 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
     # orthographic digraphs
     if orthographic:
         assert language is not None, "`language` arg needs to be specified when orthographic=True.`"
-        if language == "aln":
-            digraphs = {"sh", "dh", "rr", "ll",} # add more if necessary
-        else:
+        with open("digraphs.json", "r") as f:
+            digraphs_all = json.load(f)
+        if language not in digraphs_all.key():
             warnings.warn("Digraphs are not defined for the language. Fallback to default vocab.")
             digraphs = {}
+        else:
+            digraphs = set(digraphs_all[language])
+        
         all_chars.update(digraphs)
     
     vocab = {c: i for i, c in enumerate(all_chars)}
@@ -757,6 +765,8 @@ def main(args: argparse.Namespace) -> None:
                                     fn_kwargs={"augmentor": augmentor,
                                                "processor": processor},
                                     remove_columns=long_train.column_names)
+        if args.mix_long_short:
+            datasetdict["train"] = concatenate_datasets([datasetdict["train"], long_train])
     print("Dataset formatted.")
     
     print("*** DEBUG ***")
@@ -846,7 +856,7 @@ def main(args: argparse.Namespace) -> None:
     trainer.train()
     trainer.save_model() # will be saved to `output_dir`
     
-    if args.train_with_longer_samples:
+    if args.train_with_longer_samples and not args.mix_long_short:
         print("First Training finished.")
         # the first trainer won't be used in this stage
         del trainer
