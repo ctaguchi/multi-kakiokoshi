@@ -752,6 +752,11 @@ def main(args: argparse.Namespace) -> None:
                                   fn_kwargs={"augmentor": augmentor,
                                              "processor": processor},
                                   remove_columns=datasetdict["train"].column_names)
+    if args.train_with_longer_samples:
+        long_train = long_train.map(prepare_dataset,
+                                    fn_kwargs={"augmentor": augmentor,
+                                               "processor": processor},
+                                    remove_columns=long_train.column_names)
     print("Dataset formatted.")
     
     print("*** DEBUG ***")
