@@ -133,6 +133,12 @@ def get_args() -> argparse.Namespace:
         help="Training logging steps."
     )
     parser.add_argument(
+        "--save_steps",
+        type=int,
+        default=200,
+        help="Model saving steps. This has to be a round multiple of the evaluation steps."
+    )
+    parser.add_argument(
         "--push_to_hub",
         action="store_true",
         help="If set, the model will be pushed to Hugging Face."
@@ -805,9 +811,9 @@ def main(args: argparse.Namespace) -> None:
         num_train_epochs=args.epoch,
         gradient_checkpointing=True,
         fp16=True,
-        save_steps=100,
-        eval_steps=100,
-        logging_steps=100,
+        save_steps=args.save_steps,
+        eval_steps=args.eval_steps,
+        logging_steps=args.logging_steps,
         learning_rate=args.learning_rate,
         warmup_steps=args.warmup_steps,
         save_total_limit=2,
@@ -841,7 +847,6 @@ def main(args: argparse.Namespace) -> None:
         del trainer
         gc.collect()
         torch.cuda.empty_cache()
-        
         
         print("Starting the training with the long dataset.")
         training_args_long = TrainingArguments(
