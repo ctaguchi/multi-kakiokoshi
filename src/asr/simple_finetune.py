@@ -84,6 +84,11 @@ def get_args() -> argparse.Namespace:
         help="Repo (directory) name to save the model."
     )
     parser.add_argument(
+        "--force_redownload",
+        action="store_true",
+        help="If set, the datasets will be forcibly redownloaded (don't use cache)."
+    )
+    parser.add_argument(
         "--num_proc",
         type=int,
         default=1,
@@ -268,7 +273,8 @@ def get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_data(language: str) -> DatasetDict:
+def load_data(language: str,
+              force_redownload: bool) -> DatasetDict:
     """Load dataset.
     
     Args:
@@ -280,7 +286,8 @@ def load_data(language: str) -> DatasetDict:
         # load from huggingface
         dataset_name = f"mcv-sps-{language}-segmented"
         dataset = load_dataset(f"{USERNAME}/{dataset_name}",
-                               split="train")
+                               split="train",
+                               force_redownload=force_redownload)
         
         # train-dev split
         train_data = dataset.filter(lambda sample: sample["split"] == "train")
@@ -763,7 +770,8 @@ def run_train(mode: Literal["main", "long", "superlong"],
 def main(args: argparse.Namespace) -> None:
     """Main function."""
     print("Loading data...")
-    datasetdict = load_data(args.language)
+    datasetdict = load_data(args.language,
+                            force_redownload=args.force_redownload)
     
     if args.language in SSCLangs:
         train = datasetdict["train"]
