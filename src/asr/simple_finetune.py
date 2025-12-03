@@ -282,12 +282,13 @@ def load_data(language: str,
     Return:
         DatasetDict: containing the train and dev sets.
     """
+    download_mode = "force_redownload" if force_redownload else "reuse_dataset_if_exists"
     if args.language in SSCLangs:
         # load from huggingface
         dataset_name = f"mcv-sps-{language}-segmented"
         dataset = load_dataset(f"{USERNAME}/{dataset_name}",
                                split="train",
-                               force_redownload=force_redownload)
+                               download_mode=download_mode)
         
         # train-dev split
         train_data = dataset.filter(lambda sample: sample["split"] == "train")
