@@ -259,6 +259,11 @@ def get_args() -> argparse.Namespace:
         action="store_true",
         help="If set, mix the short segments and combined segments."
     )
+    parser.add_argument(
+        "--use_jw_data",
+        action="store_true",
+        help="If set, additional training data will be loaded."
+    )
     
     return parser.parse_args()
 
