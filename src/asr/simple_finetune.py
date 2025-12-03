@@ -657,14 +657,14 @@ def make_compute_metrics(processor: Wav2Vec2Processor):
     return compute_metrics
 
 
-def train(mode: Literal["main", "long", "superlong"],
-          train_dataset: Dataset,
-          eval_dataset: Dataset,
-          data_collator,
-          processor,
-          compute_metrics: Callable,
-          output_dir: str,
-          args: argparse.Namespace) -> None:
+def run_train(mode: Literal["main", "long", "superlong"],
+              train_dataset: Dataset,
+              eval_dataset: Dataset,
+              data_collator,
+              processor,
+              compute_metrics: Callable,
+              output_dir: str,
+              args: argparse.Namespace) -> None:
     """The training phase."""
     if mode == "main":
         batch_size = args.batch_size
@@ -924,7 +924,7 @@ def main(args: argparse.Namespace) -> None:
     wandb.login(key=wandb_api_key)
     run = wandb.init(project=args.wandb_project, name=args.wandb_run_name)
     
-    train(mode="main",
+    run_train(mode="main",
           train_dataset=datasetdict["train"],
           eval_dataset=datasetdict["dev"],
           data_collator=data_collator,
@@ -935,7 +935,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_longer_samples and not args.mix_long_short:
         print("Starting the training with the long dataset.")
-        train(mode="long",
+        run_train(mode="long",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -945,7 +945,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_superlong_samples and not args.mix_long_short:
         print("Starting the training with the superlong dataset.")
-        train(mode="superlong",
+        run_train(mode="superlong",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
