@@ -109,6 +109,12 @@ def get_args() -> argparse.Namespace:
         help="Batch size for GPU training."
     )
     parser.add_argument(
+        "--eval_batch_size",
+        type=int,
+        default=4,
+        help="Evaluation batch size."
+    )
+    parser.add_argument(
         "--learning_rate",
         type=float,
         default=3e-4,
@@ -301,7 +307,7 @@ def is_short_enough(sample: Dict[str, Any]) -> bool:
     sr = sample["audio"]["sampling_rate"]
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
-    return duration_sec <= 30.0
+    return duration_sec <= 60.0
 
 
 def has_transcription(sample: Dict[str, Any]) -> bool:
