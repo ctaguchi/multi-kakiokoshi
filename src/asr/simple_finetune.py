@@ -799,6 +799,14 @@ def main(args: argparse.Namespace) -> None:
                     remove_columns=["segments"]) # we are not using segments for dev data
         dev = dev.filter(is_short_enough)
         print("Segments collapsed.")
+        
+        # Additional training data
+        if args.use_jw_data:
+            print("Loading the additional data...")
+            additional_dataset_name = f"jw_{args.language}"
+            additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")
+            train = concatenate_datasets([train, additional_train])
+            print("Additional data loaded and concatenated to the main train set.")
     
     elif args.language in CVLangs:
         train = datasetdict["train"]
