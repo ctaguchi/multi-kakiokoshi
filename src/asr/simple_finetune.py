@@ -930,6 +930,7 @@ def main(args: argparse.Namespace) -> None:
           data_collator=data_collator,
           compute_metrics=compute_metrics,
           output_dir=output_dir,
+          processor=processor,
           args=args)
     print("Main training done.")
     
@@ -941,6 +942,7 @@ def main(args: argparse.Namespace) -> None:
               data_collator=data_collator,
               compute_metrics=compute_metrics,
               output_dir=output_dir,
+              processor=processor,
               args=args)
     
     if args.train_with_superlong_samples and not args.mix_long_short:
@@ -951,6 +953,7 @@ def main(args: argparse.Namespace) -> None:
               data_collator=data_collator,
               compute_metrics=compute_metrics,
               output_dir=output_dir,
+              processor=processor,
               args=args)
         
     wandb.finish()
