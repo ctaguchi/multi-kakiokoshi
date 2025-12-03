@@ -26,7 +26,7 @@ import unicodedata
 import torch.nn as nn
 
 import argparse
-from typing import List, Dict, Any, Union, Optional
+from typing import List, Dict, Any, Union, Optional, Callable, Literal
 import os
 import json
 from dataclasses import dataclass
@@ -218,6 +218,23 @@ def get_args() -> argparse.Namespace:
         "--train_with_longer_samples",
         action="store_true",
         help="Additional training with combined samples to form longer segments."
+    )
+    parser.add_argument(
+        "--train_with_superlong_samples",
+        action="store_true",
+        help="Train with superlong samples (~10seconds)"
+    )
+    parser.add_argument(
+        "--superlong_batch_size",
+        type=int,
+        default=1,
+        help="Batch size for the superlong samples."
+    )
+    parser.add_argument(
+        "--superlong_epoch",
+        type=int,
+        default=1,
+        help="Number of epochs for the superlong samples."
     )
     parser.add_argument(
         "--long_batch_size",
@@ -640,6 +657,97 @@ def make_compute_metrics(processor: Wav2Vec2Processor):
     return compute_metrics
 
 
+def train(mode: Literal["main", "long", "superlong"],
+          train_dataset: Dataset,
+          eval_dataset: Dataset,
+          data_collator,
+          processor,
+          compute_metrics: Callable,
+          output_dir: str,
+          args: argparse.Namespace) -> None:
+    """The training phase."""
+    if mode == "main":
+        batch_size = args.batch_size
+        num_train_epochs = args.epoch
+        ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
+        new_vocab_size = len(processor.tokenizer)
+            
+        model = Wav2Vec2ForCTC.from_pretrained(
+            args.model,
+            attention_dropout=0.0,
+            hidden_dropout=0.0,
+            feat_proj_dropout=0.0,
+            mask_time_prob=0.05,
+            layerdrop=0.0,
+            ctc_loss_reduction="mean",
+            pad_token_id=processor.tokenizer.pad_token_id,
+            vocab_size=new_vocab_size,
+            ignore_mismatched_sizes=ignore_mismatched_sizes
+        )
+        
+        # Replace/resize CTC head if necessary
+        if ignore_mismatched_sizes and args.replace_ctc:
+            in_features = model.lm_head.in_features
+            model.lm_head = nn.Linear(in_features, new_vocab_size)
+            model.config.vocab_size = new_vocab_size
+            
+    elif mode == "long":
+        batch_size = args.long_batch_size
+        num_train_epochs = args.long_epoch
+        model = Wav2Vec2ForCTC.from_pretrained(output_dir)
+    elif mode == "superlong":
+        batch_size = args.superlong_batch_size
+        num_train_epochs = args.superlong_epoch
+        model = Wav2Vec2ForCTC.from_pretrained(output_dir)
+    else:
+        raise ValueError
+    
+    if args.freeze_feature_encoder:
+        model.freeze_feature_encoder() # prevents overfitting, faster training
+    
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        group_by_length=True,
+        per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=2,
+        eval_strategy="steps",
+        num_train_epochs=num_train_epochs,
+        gradient_checkpointing=True,
+        fp16=True,
+        save_steps=args.save_steps,
+        eval_steps=args.eval_steps,
+        logging_steps=args.logging_steps,
+        learning_rate=args.learning_rate,
+        warmup_steps=args.warmup_steps,
+        save_total_limit=2,
+        push_to_hub=args.push_to_hub,
+        hub_model_id=args.repo_name,
+        hub_token=os.environ["HF_TOKEN"],
+        report_to=["wandb"],
+        run_name=args.wandb_run_name,
+        load_best_model_at_end=True,
+    )
+    
+    trainer = Trainer(
+        model=model,
+        data_collator=data_collator,
+        args=training_args,
+        compute_metrics=compute_metrics,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=processor.feature_extractor,
+    )
+    
+    print("Training started.")
+    trainer.train()
+    trainer.save_model() # will be saved to `output_dir`
+    
+    # the trainer won't be used in the next stage
+    del trainer
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 def main(args: argparse.Namespace) -> None:
     """Main function."""
     print("Loading data...")
@@ -661,6 +769,17 @@ def main(args: argparse.Namespace) -> None:
             long_train = long_train.filter(has_transcription)
             long_train = long_train.map(normalize_text,
                                         batched=True)
+        # Superlong version
+        if args.train_with_superlong_samples:
+            superlong_train = combine_segments_in_dataset(
+                dataset=train,
+                combine_last=True,
+                min_length=10
+            )
+            # Sample cleaning
+            superlong_train = superlong_train.filter(has_transcription)
+            superlong_train = superlong_train.map(normalize_text,
+                                                  batched=True)
         
         print("Collapsing segments...")
         train = train.map(batch_collapse_segments,
@@ -768,6 +887,13 @@ def main(args: argparse.Namespace) -> None:
                                     remove_columns=long_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], long_train])
+    if args.train_with_superlong_samples:
+        superlong_train = superlong_train.map(prepare_dataset,
+                                              fn_kwargs={"augmentor": augmentor,
+                                                         "processor": processor},
+                                              remove_columns=superlong_train.column_names)
+        if args.mix_long_short:
+            datasetdict["train"] = concatenate_datasets([datasetdict["train"], superlong_train])
     print("Dataset formatted.")
     
     print("*** DEBUG ***")
@@ -782,31 +908,9 @@ def main(args: argparse.Namespace) -> None:
         processor=processor,
         padding=True
     )
-    
-    ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
-    new_vocab_size = len(processor.tokenizer)
         
-    model = Wav2Vec2ForCTC.from_pretrained(
-        args.model,
-        attention_dropout=0.0,
-        hidden_dropout=0.0,
-        feat_proj_dropout=0.0,
-        mask_time_prob=0.05,
-        layerdrop=0.0,
-        ctc_loss_reduction="mean",
-        pad_token_id=processor.tokenizer.pad_token_id,
-        vocab_size=new_vocab_size,
-        ignore_mismatched_sizes=ignore_mismatched_sizes
-    )
-    
-    # Replace/resize CTC head if necessary
-    if ignore_mismatched_sizes and args.replace_ctc:
-        in_features = model.lm_head.in_features
-        model.lm_head = nn.Linear(in_features, new_vocab_size)
-        model.config.vocab_size = new_vocab_size
-    
-    if args.freeze_feature_encoder:
-        model.freeze_feature_encoder() # prevents overfitting, faster training
+    # Evaluation metrics
+    compute_metrics = make_compute_metrics(processor=processor)
         
     # wandb login
     try:
@@ -814,91 +918,40 @@ def main(args: argparse.Namespace) -> None:
     except KeyError as e:
         print("WandB API key not found in the environment.")
         print(e)
+        
+    output_dir = os.path.join(MODEL_DIR, args.repo_name)
     
     wandb.login(key=wandb_api_key)
-    
-    output_dir = os.path.join(MODEL_DIR, args.repo_name)
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        group_by_length=True,
-        per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=2,
-        eval_strategy="steps",
-        num_train_epochs=args.epoch,
-        gradient_checkpointing=True,
-        fp16=True,
-        save_steps=args.save_steps,
-        eval_steps=args.eval_steps,
-        logging_steps=args.logging_steps,
-        learning_rate=args.learning_rate,
-        warmup_steps=args.warmup_steps,
-        save_total_limit=2,
-        push_to_hub=args.push_to_hub,
-        hub_model_id=args.repo_name,
-        hub_token=os.environ["HF_TOKEN"],
-        report_to=["wandb"],
-        run_name=args.wandb_run_name,
-        load_best_model_at_end=True,
-    )
-    
-    compute_metrics = make_compute_metrics(processor=processor)
-    trainer = Trainer(
-        model=model,
-        data_collator=data_collator,
-        args=training_args,
-        compute_metrics=compute_metrics,
-        train_dataset=datasetdict["train"],
-        eval_dataset=datasetdict["dev"],
-        tokenizer=processor.feature_extractor,
-    )
-    
-    print("Training started.")
     run = wandb.init(project=args.wandb_project, name=args.wandb_run_name)
-    trainer.train()
-    trainer.save_model() # will be saved to `output_dir`
+    
+    train(mode="main",
+          train_dataset=datasetdict["train"],
+          eval_dataset=datasetdict["dev"],
+          data_collator=data_collator,
+          compute_metrics=compute_metrics,
+          output_dir=output_dir,
+          args=args)
+    print("Main training done.")
     
     if args.train_with_longer_samples and not args.mix_long_short:
-        print("First Training finished.")
-        # the first trainer won't be used in this stage
-        del trainer
-        gc.collect()
-        torch.cuda.empty_cache()
-        
         print("Starting the training with the long dataset.")
-        training_args_long = TrainingArguments(
-            output_dir=output_dir,
-            group_by_length=True,
-            per_device_train_batch_size=args.long_batch_size,
-            gradient_accumulation_steps=2,
-            eval_strategy="steps",
-            num_train_epochs=args.long_epoch,
-            gradient_checkpointing=True,
-            fp16=True,
-            save_steps=args.save_steps,
-            eval_steps=args.eval_steps,
-            logging_steps=args.logging_steps,
-            learning_rate=args.learning_rate,
-            warmup_steps=args.warmup_steps,
-            save_total_limit=2,
-            push_to_hub=args.push_to_hub,
-            hub_model_id=args.repo_name,
-            hub_token=os.environ["HF_TOKEN"],
-            report_to=["wandb"],
-            run_name=args.wandb_run_name,
-            load_best_model_at_end=True,
-        )
-        model = Wav2Vec2ForCTC.from_pretrained(output_dir)
-        trainer_long = Trainer(
-            model=model,
-            data_collator=data_collator,
-            args=training_args_long,
-            compute_metrics=compute_metrics,
-            train_dataset=long_train, # make sure to use the longer version
-            eval_dataset=datasetdict["dev"],
-            tokenizer=processor.feature_extractor,
-        )
-        trainer_long.train()
-        trainer_long.save_model()
+        train(mode="long",
+              train_dataset=long_train,
+              eval_dataset=datasetdict["dev"],
+              data_collator=data_collator,
+              compute_metrics=compute_metrics,
+              output_dir=output_dir,
+              args=args)
+    
+    if args.train_with_superlong_samples and not args.mix_long_short:
+        print("Starting the training with the superlong dataset.")
+        train(mode="superlong",
+              train_dataset=long_train,
+              eval_dataset=datasetdict["dev"],
+              data_collator=data_collator,
+              compute_metrics=compute_metrics,
+              output_dir=output_dir,
+              args=args)
         
     wandb.finish()
 
