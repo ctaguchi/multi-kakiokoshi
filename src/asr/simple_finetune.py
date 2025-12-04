@@ -1045,7 +1045,7 @@ def main(args: argparse.Namespace) -> None:
                                               remove_columns=superlong_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], superlong_train])
-    if args.train_with_maxlong_samples:
+    if args.train_with_maxlong_samples and not args.train_with_original_only:
         max_train = max_train.map(prepare_dataset,
                                   fn_kwargs={"augmentor": augmentor,
                                                          "processor": processor},
