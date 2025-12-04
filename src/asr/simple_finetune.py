@@ -702,7 +702,8 @@ def run_train(mode: Literal["main", "long", "superlong"],
         
         if args.adapter_lang:
             model = Wav2Vec2ForCTC.from_pretrained(args.model,
-                                                   target_lang=args.adapter_lang)
+                                                   target_lang=args.adapter_lang,
+                                                   ignore_mismatched_sizes=True) # important
             model.load_adapter(args.adapter_lang)
         else:
             ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
