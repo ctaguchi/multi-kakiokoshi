@@ -98,7 +98,8 @@ def main(args: argparse.Namespace):
                                     batched=True,
                                     fn_kwargs={
                                         "model": model,
-                                        "processor": processor
+                                        "processor": processor,
+                                        "device": device
                                     })
     preds: List[str] = test_dataset["pred_str"]
     
