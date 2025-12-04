@@ -42,6 +42,12 @@ def get_args() -> argparse.Namespace:
         type=int,
         help="Results ID."
     )
+    parser.add_argument(
+        "-b",
+        "--batch_size",
+        type=int,
+        help="Evaluation batch size."
+    )
     return parser.parse_args()
 
 
@@ -172,7 +178,7 @@ def main(args: argparse.Namespace):
     print("Running the inference...")
     test_dataset = test_dataset.map(batched_prediction,
                                     batched=True,
-                                    batch_size=8,
+                                    batch_size=args.batch_size,
                                     fn_kwargs={
                                         "model": model,
                                         "processor": processor,
