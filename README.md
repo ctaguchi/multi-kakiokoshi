@@ -1,6 +1,10 @@
 # multi-kakiokoshi
 
-## Overall strategy
+## Strategy
+- Add any additional data (e.g. from the Bible)
+- Segment into smaller bits, and combine them for various lengths
+
+## (Future work) More strategies
 - Pre-fine-tune a pre-trained multilingual self-supervised speech model with a high/mid-resource similar language with the same writing system.
   - This is for both fitting the model to the language's phonology and also making
 - Do additional fine-tuning with the target low-resource language.
@@ -58,3 +62,7 @@ Before training ASR models, make sure to:
   - regex would be: # TODO
   - Full Latin/Greek alphabet with the special characters
 - remove duplicate whitespaces ("a  b" -> "a b")
+
+Note that this text preprocessing is not the same as the one used for the test data officially (https://www.codabench.org/competitions/10820/?ref=community.mozilladatacollective.com#/pages-tab).
+
+## 
