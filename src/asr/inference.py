@@ -1,4 +1,4 @@
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+from transformers import Wav2Vec2ForCTC, AutoProcessor
 import torch
 import pandas as pd
 from datasets import Dataset, Audio
@@ -92,7 +92,8 @@ def main(args: argparse.Namespace):
         model_dir_with_vocab = os.path.dirname(args.model)
     else:
         model_dir_with_vocab = args.model
-    processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+    # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+    processor = AutoProcessor.from_pretrained(model_dir_with_vocab)
     processor.tokenizer.set_target_lang(args.language)
     
     # Load the test data
