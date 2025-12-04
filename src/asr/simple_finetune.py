@@ -370,7 +370,7 @@ def is_long_enough(sample: Dict[str, Any]) -> bool:
     """Remove samples that are too short.
     It seems Wav2Vec2 models are not good at learning short segments.
     """
-    sr = sample["audio"]["samplling_rate"]
+    sr = sample["audio"]["sampling_rate"]
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
     return duration_sec >= 1.5
