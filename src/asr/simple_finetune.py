@@ -845,7 +845,7 @@ def main(args: argparse.Namespace) -> None:
         if args.use_jw_data:
             print("Loading the additional data...")
             additional_dataset_name = f"jw_{args.language}"
-            additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")
+            additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"]
             train = concatenate_datasets([train, additional_train])
             print("Additional data loaded and concatenated to the main train set.")
     
