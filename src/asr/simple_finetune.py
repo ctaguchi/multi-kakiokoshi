@@ -304,6 +304,11 @@ def get_args() -> argparse.Namespace:
         action="store_true",
         help="If set, training with the original dataset will be run at the end"
     )
+    parser.add_argument(
+        "--train_with_original_only",
+        action="store_true",
+        help="If set, train the model with the original audio only."
+    )
     
     return parser.parse_args()
 
@@ -1067,15 +1072,17 @@ def main(args: argparse.Namespace) -> None:
     wandb.login(key=wandb_api_key)
     run = wandb.init(project=args.wandb_project, name=args.wandb_run_name)
     
-    run_train(mode="main",
-          train_dataset=datasetdict["train"],
-          eval_dataset=datasetdict["dev"],
-          data_collator=data_collator,
-          compute_metrics=compute_metrics,
-          output_dir=output_dir,
-          processor=processor,
-          args=args)
-    print("Main training done.")
+    if not args.train_with_original_only:
+        # Run training with smallest segmented audio
+        run_train(mode="main",
+            train_dataset=datasetdict["train"],
+            eval_dataset=datasetdict["dev"],
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            output_dir=output_dir,
+            processor=processor,
+            args=args)
+        print("Main training done.")
     
     if args.train_with_longer_samples and not args.mix_long_short:
         print("Starting the training with the long dataset.")
@@ -1099,7 +1106,7 @@ def main(args: argparse.Namespace) -> None:
               processor=processor,
               args=args)
         
-    if args.train_with_maxlong_samples and args.run_original_at_end:
+    if (args.train_with_maxlong_samples) and (args.run_original_at_end or args.train_with_original_only):
         print("Starting the training with the original dataset.")
         run_train(mode="maxlong",
                   train_dataset=max_train,
