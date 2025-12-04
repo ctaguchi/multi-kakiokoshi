@@ -223,6 +223,17 @@ def get_args() -> argparse.Namespace:
         default=1.25,
         help="Maximum rate for time stretch.",
     )
+    parser.add_argument(
+        "--init_adapter_layer",
+        action="store_true",
+        help="If set, model.init_adapter_layer() will be called instead of replacing the adapter from scratch."
+    )
+    parser.add_argument(
+        "--adapter_lang",
+        type=str,
+        default=None,
+        help="If a language code is specified, the pretrained adapter of the language will be used for the training."
+    )
     
     # Sample combination for adapting to longer data
     parser.add_argument(
@@ -559,7 +570,7 @@ def prepare_dataset(batch: dict,
     batch["transcription"] = batch["transcription"].replace(" ", "|")
     
     audio = batch["audio"]
-    if augmentor is not None: # data augmentation
+    if augmentor is not None: # do data augmentation
         audio["array"] = augmentor(samples=audio["array"],
                                    sample_rate=audio["sampling_rate"])
 
@@ -705,10 +716,15 @@ def run_train(mode: Literal["main", "long", "superlong"],
         )
         
         # Replace/resize CTC head if necessary
-        if ignore_mismatched_sizes and args.replace_ctc:
-            in_features = model.lm_head.in_features
-            model.lm_head = nn.Linear(in_features, new_vocab_size)
-            model.config.vocab_size = new_vocab_size
+        if ignore_mismatched_sizes:
+            if args.replace_ctc: # Totally replace the CTC layer with a new linear CTC layer
+                in_features = model.lm_head.in_features
+                model.lm_head = nn.Linear(in_features, new_vocab_size)
+                model.config.vocab_size = new_vocab_size
+            elif args.init_adapter_layer: # Use the off-the-shelf method of the model
+                model.init_adapter_layers()
+            else:
+                raise ValueError("Either args.replace_ctc or args.init_adapter_layer must be activated.")
             
     elif mode == "long":
         batch_size = args.long_batch_size
@@ -722,7 +738,12 @@ def run_train(mode: Literal["main", "long", "superlong"],
         raise ValueError
     
     if args.freeze_feature_encoder:
-        model.freeze_feature_encoder() # prevents overfitting, faster training
+        model.freeze_base_model() # prevents overfitting, faster training
+        
+    if args.init_adapter_layer:
+        adapter_weights = model._get_adapters()
+        for param in adapter_weights.values():
+            param.requires_grad = True
     
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -855,21 +876,33 @@ def main(args: argparse.Namespace) -> None:
     vocab = get_vocab_from_dataset(datasetdict,
                                    language=args.language,
                                    orthographic=True)
+    vocab_dict = {args.language: vocab}
     # save vocab
     model_dir = os.path.join(MODEL_DIR, args.repo_name)
     vocab_file = os.path.join(model_dir, "vocab.json")
     os.makedirs(model_dir, exist_ok=True)
     with open(vocab_file, "w") as f:
-        json.dump(vocab, f)
+        json.dump(vocab_dict, f)
     print("Vocab created.")
     
     print("Preparing the tokenizer...")
-    tokenizer = Wav2Vec2CTCTokenizer(
-        vocab_file=vocab_file,
+    # tokenizer = Wav2Vec2CTCTokenizer(
+    #     vocab_file=vocab_file,
+    #     unk_token="[UNK]",
+    #     pad_token="[PAD]",
+    #     word_delimiter_token="|",
+    #     target_lang=args.language
+    # )
+    tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+        model_dir,
         unk_token="[UNK]",
         pad_token="[PAD]",
-        word_delimiter_token="|"
+        word_delimiter_token="|",
+        target_lang=args.language
     )
+    if args.push_to_hub:
+        # Save the tokenizer
+        tokenizer.push_to_hub(args.repo_name)
     print("Tokenizer prepared.")
     
     print("Defining the feature extractor...")
