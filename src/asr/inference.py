@@ -87,7 +87,12 @@ def main(args: argparse.Namespace):
         target_lang=args.language
     ).to(device)
     
-    processor = Wav2Vec2Processor.from_pretrained(args.model)
+    if not os.path.exists(os.path.join(args.model, "vocab.json")):
+        # It is a checkpoint; look for the upper folder
+        model_dir_with_vocab = os.path.dirname(args.model)
+    else:
+        model_dir_with_vocab = args.model
+    processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     processor.tokenizer.set_target_lang(args.language)
     
     # Load the test data
