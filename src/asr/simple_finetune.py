@@ -360,7 +360,7 @@ def is_short_enough(sample: Dict[str, Any]) -> bool:
     sr = sample["audio"]["sampling_rate"]
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
-    return duration_sec <= 60.0
+    return duration_sec <= 90.0
 
 
 def has_transcription(sample: Dict[str, Any]) -> bool:
@@ -891,17 +891,26 @@ def main(args: argparse.Namespace) -> None:
             max_train = max_train.filter(has_transcription)
             max_train = max_train.map(normalize_text_official)
         
-        print("Collapsing segments...")
-        train = train.map(batch_collapse_segments,
-                        batched=True,
-                        batch_size=16,
-                        num_proc=4,
-                        remove_columns=train.column_names) # should take about 5 mins, and the memory should be ok within 12.7GB
-        # The total number of samples can reach around 10k
-        dev = dev.map(lambda x: x,
-                    remove_columns=["segments"]) # we are not using segments for dev data
-        dev = dev.filter(is_short_enough)
-        print("Segments collapsed.")
+        if args.train_with_original_only:
+            train = max_train
+            dev = dev.map(lambda x: x,
+                          remove_columns=["segments"])
+            dev = dev.filter(is_short_enough)
+            print("Original data prepared.")
+            
+        else:
+            print("Collapsing segments...")
+            train = train.map(batch_collapse_segments,
+                            batched=True,
+                            batch_size=16,
+                            num_proc=4,
+                            remove_columns=train.column_names) # should take about 5 mins, and the memory should be ok within 12.7GB
+            # The total number of samples can reach around 10k
+            dev = dev.map(lambda x: x,
+                          remove_columns=["segments"]) # we are not using segments for dev data
+            dev = dev.filter(is_short_enough)
+            print("Segments collapsed.")
+            
         
         # Additional training data
         if args.use_jw_data:
@@ -1106,16 +1115,26 @@ def main(args: argparse.Namespace) -> None:
               processor=processor,
               args=args)
         
-    if (args.train_with_maxlong_samples) and (args.run_original_at_end or args.train_with_original_only):
+    if args.train_with_maxlong_samples:
         print("Starting the training with the original dataset.")
-        run_train(mode="maxlong",
-                  train_dataset=max_train,
-                  eval_dataset=datasetdict["dev"],
-                  data_collator=data_collator,
-                  compute_metrics=compute_metrics,
-                  output_dir=output_dir,
-                  processor=processor,
-                  args=args)
+        if args.run_original_at_end:
+            run_train(mode="maxlong",
+                    train_dataset=max_train,
+                    eval_dataset=datasetdict["dev"],
+                    data_collator=data_collator,
+                    compute_metrics=compute_metrics,
+                    output_dir=output_dir,
+                    processor=processor,
+                    args=args)
+        elif args.train_with_original_only:
+            run_train(mode="maxlong",
+                    train_dataset=train,
+                    eval_dataset=datasetdict["dev"],
+                    data_collator=data_collator,
+                    compute_metrics=compute_metrics,
+                    output_dir=output_dir,
+                    processor=processor,
+                    args=args)
         
     wandb.finish()
 
