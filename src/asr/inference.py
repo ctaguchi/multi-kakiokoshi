@@ -101,6 +101,7 @@ def main(args: argparse.Namespace):
     # Run inference
     test_dataset = test_dataset.map(batched_prediction,
                                     batched=True,
+                                    batch_size=8,
                                     fn_kwargs={
                                         "model": model,
                                         "processor": processor,
