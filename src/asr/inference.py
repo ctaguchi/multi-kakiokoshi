@@ -11,8 +11,8 @@ import shutil
 import json
 
 
-TEST_DATA_DIR = "data/mdc_asr_shared_task_test_data"
-TEST_RESULTS_DIR = "data/test_results/"
+TEST_DATA_DIR = "src/data/mdc_asr_shared_task_test_data"
+TEST_RESULTS_DIR = "src/data/test_results/"
 
 
 def get_args() -> argparse.Namespace:
