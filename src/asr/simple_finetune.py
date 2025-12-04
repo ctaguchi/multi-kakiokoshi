@@ -15,6 +15,8 @@ from transformers import (
     TrainingArguments,
     Trainer
 )
+from transformers.models.wav2vec2.modeling_wav2vec2 import WAV2VEC2_ADAPTER_SAFE_FILE
+from safetensors.torch import save_file as safe_save_file
 from audiomentations import Compose, PitchShift, AddBackgroundNoise, TimeStretch
 import wandb
 import torch
@@ -362,6 +364,16 @@ def is_short_enough(sample: Dict[str, Any]) -> bool:
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
     return duration_sec <= 90.0
+
+
+def is_long_enough(sample: Dict[str, Any]) -> bool:
+    """Remove samples that are too short.
+    It seems Wav2Vec2 models are not good at learning short segments.
+    """
+    sr = sample["audio"]["samplling_rate"]
+    n_samples = len(sample["audio"]["array"])
+    duration_sec = n_samples / sr
+    return duration_sec >= 1.5
 
 
 def has_transcription(sample: Dict[str, Any]) -> bool:
@@ -849,6 +861,8 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     del trainer
     gc.collect()
     torch.cuda.empty_cache()
+    
+    return model
 
 
 def main(args: argparse.Namespace) -> None:
@@ -906,6 +920,8 @@ def main(args: argparse.Namespace) -> None:
                             batch_size=16,
                             num_proc=4,
                             remove_columns=train.column_names) # should take about 5 mins, and the memory should be ok within 12.7GB
+            train = train.filter(is_long_enough)
+            print("Segments that are too short have been removed.")
             # The total number of samples can reach around 10k
             dev = dev.map(lambda x: x,
                           remove_columns=["segments"]) # we are not using segments for dev data
@@ -1031,6 +1047,7 @@ def main(args: argparse.Namespace) -> None:
                                   fn_kwargs={"augmentor": augmentor,
                                              "processor": processor},
                                   remove_columns=datasetdict["train"].column_names)
+    print("Short-segment dataset prepared.")
     if args.train_with_longer_samples:
         long_train = long_train.map(prepare_dataset,
                                     fn_kwargs={"augmentor": augmentor,
@@ -1038,6 +1055,7 @@ def main(args: argparse.Namespace) -> None:
                                     remove_columns=long_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], long_train])
+        print("Long-segment dataset prepared.")
     if args.train_with_superlong_samples:
         superlong_train = superlong_train.map(prepare_dataset,
                                               fn_kwargs={"augmentor": augmentor,
@@ -1045,6 +1063,7 @@ def main(args: argparse.Namespace) -> None:
                                               remove_columns=superlong_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], superlong_train])
+        print("Super-long-segment dataset prepared.")
     if args.train_with_maxlong_samples and not args.train_with_original_only:
         max_train = max_train.map(prepare_dataset,
                                   fn_kwargs={"augmentor": augmentor,
@@ -1052,6 +1071,7 @@ def main(args: argparse.Namespace) -> None:
                                               remove_columns=max_train.column_names)
         if args.mix_long_short and not args.run_original_at_end:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], max_train])
+        print("Max-long-segment dataset prepared.")
     print("Dataset formatted.")
     
     print("*** DEBUG ***")
@@ -1061,6 +1081,7 @@ def main(args: argparse.Namespace) -> None:
         text=[sample["labels"]],
         return_tensors="pt"
     ).input_ids)
+    print("Training data size:", len(datasetdict["train"]))
     
     data_collator = DataCollatorCTCWithPadding(
         processor=processor,
@@ -1084,7 +1105,7 @@ def main(args: argparse.Namespace) -> None:
     
     if not args.train_with_original_only:
         # Run training with smallest segmented audio
-        run_train(mode="main",
+        model = run_train(mode="main",
             train_dataset=datasetdict["train"],
             eval_dataset=datasetdict["dev"],
             data_collator=data_collator,
@@ -1096,7 +1117,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_longer_samples and not args.mix_long_short:
         print("Starting the training with the long dataset.")
-        run_train(mode="long",
+        model = run_train(mode="long",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -1107,7 +1128,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_superlong_samples and not args.mix_long_short:
         print("Starting the training with the superlong dataset.")
-        run_train(mode="superlong",
+        model = run_train(mode="superlong",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -1119,7 +1140,7 @@ def main(args: argparse.Namespace) -> None:
     if args.train_with_maxlong_samples:
         print("Starting the training with the original dataset.")
         if args.run_original_at_end:
-            run_train(mode="maxlong",
+            model = run_train(mode="maxlong",
                     train_dataset=max_train,
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
@@ -1128,7 +1149,7 @@ def main(args: argparse.Namespace) -> None:
                     processor=processor,
                     args=args)
         elif args.train_with_original_only:
-            run_train(mode="maxlong",
+            model = run_train(mode="maxlong",
                     train_dataset=datasetdict["train"],
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
@@ -1136,6 +1157,11 @@ def main(args: argparse.Namespace) -> None:
                     output_dir=output_dir,
                     processor=processor,
                     args=args)
+    
+    adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(args.language)
+    adapter_file = os.path.join(output_dir, adapter_file)
+
+    safe_save_file(model._get_adapters(), adapter_file, metadata={"format": "pt"})
         
     wandb.finish()
 
