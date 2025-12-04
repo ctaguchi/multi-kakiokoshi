@@ -166,8 +166,10 @@ def main(args: argparse.Namespace):
     
     # Load the test data
     test_dataset = load_testdata(test_data_dir=TEST_DATA_DIR, language=args.language)
+    print("Test data size:", len(test_dataset))
     
     # Run inference
+    print("Running the inference...")
     test_dataset = test_dataset.map(batched_prediction,
                                     batched=True,
                                     batch_size=8,
@@ -177,6 +179,7 @@ def main(args: argparse.Namespace):
                                         "device": device
                                     },
                                     load_from_cache_file=False,)
+    print(test_dataset.column_names)
     preds: List[str] = test_dataset["pred_str"]
     
     # Load the test tsv sheet
