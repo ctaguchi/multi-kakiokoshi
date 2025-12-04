@@ -862,6 +862,11 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     trainer.train()
     trainer.save_model() # will be saved to `output_dir`
     
+    adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(args.language)
+    adapter_file = os.path.join(output_dir, adapter_file)
+    safe_save_file(model._get_adapters(), adapter_file, metadata={"format": "pt"})
+    trainer.push_to_hub()
+    
     # keep track of the number of steps
     last_step = trainer.state.global_step
     
@@ -870,7 +875,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     gc.collect()
     torch.cuda.empty_cache()
     
-    return model, last_step
+    return last_step
 
 
 def main(args: argparse.Namespace) -> None:
@@ -1115,7 +1120,7 @@ def main(args: argparse.Namespace) -> None:
     
     if not args.train_with_original_only:
         # Run training with smallest segmented audio
-        model, last_step = run_train(mode="main",
+        last_step = run_train(mode="main",
             train_dataset=datasetdict["train"],
             eval_dataset=datasetdict["dev"],
             data_collator=data_collator,
@@ -1128,7 +1133,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_longer_samples and not args.mix_long_short:
         print("Starting the training with the long dataset.")
-        model, last_step = run_train(mode="long",
+        last_step = run_train(mode="long",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -1140,7 +1145,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_superlong_samples and not args.mix_long_short:
         print("Starting the training with the superlong dataset.")
-        model, last_step= run_train(mode="superlong",
+        last_step= run_train(mode="superlong",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -1153,7 +1158,7 @@ def main(args: argparse.Namespace) -> None:
     if args.train_with_maxlong_samples:
         print("Starting the training with the original dataset.")
         if args.run_original_at_end:
-            model, last_step = run_train(mode="maxlong",
+            last_step = run_train(mode="maxlong",
                     train_dataset=max_train,
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
@@ -1163,7 +1168,7 @@ def main(args: argparse.Namespace) -> None:
                     last_step=last_step,
                     args=args)
         elif args.train_with_original_only:
-            model,last_step = run_train(mode="maxlong",
+            last_step = run_train(mode="maxlong",
                     train_dataset=datasetdict["train"],
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
@@ -1172,13 +1177,8 @@ def main(args: argparse.Namespace) -> None:
                     processor=processor,
                     last_step=last_step,
                     args=args)
-    
-    adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(args.language)
-    adapter_file = os.path.join(output_dir, adapter_file)
-
-    safe_save_file(model._get_adapters(), adapter_file, metadata={"format": "pt"})
         
-    wandb.finish()
+    
 
 if __name__ == "__main__":
     args = get_args()
