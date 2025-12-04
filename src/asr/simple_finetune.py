@@ -699,32 +699,37 @@ def run_train(mode: Literal["main", "long", "superlong"],
     if mode == "main":
         batch_size = args.batch_size
         num_train_epochs = args.epoch
-        ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
-        new_vocab_size = len(processor.tokenizer)
-            
-        model = Wav2Vec2ForCTC.from_pretrained(
-            args.model,
-            attention_dropout=0.0,
-            hidden_dropout=0.0,
-            feat_proj_dropout=0.0,
-            mask_time_prob=0.05,
-            layerdrop=0.0,
-            ctc_loss_reduction="mean",
-            pad_token_id=processor.tokenizer.pad_token_id,
-            vocab_size=new_vocab_size,
-            ignore_mismatched_sizes=ignore_mismatched_sizes
-        )
         
-        # Replace/resize CTC head if necessary
-        if ignore_mismatched_sizes:
-            if args.replace_ctc: # Totally replace the CTC layer with a new linear CTC layer
-                in_features = model.lm_head.in_features
-                model.lm_head = nn.Linear(in_features, new_vocab_size)
-                model.config.vocab_size = new_vocab_size
-            elif args.init_adapter_layer: # Use the off-the-shelf method of the model
-                model.init_adapter_layers()
-            else:
-                raise ValueError("Either args.replace_ctc or args.init_adapter_layer must be activated.")
+        if args.adapter_lang:
+            model = Wav2Vec2ForCTC.from_pretrained(args.model,
+                                                   target_lang=args.adapter_lang)
+        else:
+            ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
+            new_vocab_size = len(processor.tokenizer)
+                
+            model = Wav2Vec2ForCTC.from_pretrained(
+                args.model,
+                attention_dropout=0.0,
+                hidden_dropout=0.0,
+                feat_proj_dropout=0.0,
+                mask_time_prob=0.05,
+                layerdrop=0.0,
+                ctc_loss_reduction="mean",
+                pad_token_id=processor.tokenizer.pad_token_id,
+                vocab_size=new_vocab_size,
+                ignore_mismatched_sizes=ignore_mismatched_sizes
+            )
+            
+            # Replace/resize CTC head if necessary
+            if ignore_mismatched_sizes:
+                if args.replace_ctc: # Totally replace the CTC layer with a new linear CTC layer
+                    in_features = model.lm_head.in_features
+                    model.lm_head = nn.Linear(in_features, new_vocab_size)
+                    model.config.vocab_size = new_vocab_size
+                elif args.init_adapter_layer: # Use the off-the-shelf method of the model
+                    model.init_adapter_layers()
+                else:
+                    raise ValueError("Either args.replace_ctc or args.init_adapter_layer must be activated.")
             
     elif mode == "long":
         batch_size = args.long_batch_size
@@ -872,55 +877,64 @@ def main(args: argparse.Namespace) -> None:
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
     
-    print("Creating the vocab...")
-    vocab = get_vocab_from_dataset(datasetdict,
-                                   language=args.language,
-                                   orthographic=True)
-    vocab_dict = {args.language: vocab}
-    # save vocab
-    model_dir = os.path.join(MODEL_DIR, args.repo_name)
-    vocab_file = os.path.join(model_dir, "vocab.json")
-    os.makedirs(model_dir, exist_ok=True)
-    with open(vocab_file, "w") as f:
-        json.dump(vocab_dict, f)
-    print("Vocab created.")
+    # Tokenizer/Processor
+    if args.adapter_lang:
+        print(f"Using the pretrained adapter for {args.adapter_lang}...")
+        processor = Wav2Vec2Processor.from_pretrained(args.model)
+        processor.tokenizer.set_target_lang(args.adapter_lang)
+        # not to be confused with the training target language --
+        # we can use the English adapter for training Scots
+        
+    else:
+        print("Creating the vocab...")
+        vocab = get_vocab_from_dataset(datasetdict,
+                                    language=args.language,
+                                    orthographic=True)
+        vocab_dict = {args.language: vocab}
+        # save vocab
+        model_dir = os.path.join(MODEL_DIR, args.repo_name)
+        vocab_file = os.path.join(model_dir, "vocab.json")
+        os.makedirs(model_dir, exist_ok=True)
+        with open(vocab_file, "w") as f:
+            json.dump(vocab_dict, f)
+        print("Vocab created.")
+        
+        print("Preparing the tokenizer...")
+        # tokenizer = Wav2Vec2CTCTokenizer(
+        #     vocab_file=vocab_file,
+        #     unk_token="[UNK]",
+        #     pad_token="[PAD]",
+        #     word_delimiter_token="|",
+        #     target_lang=args.language
+        # )
+        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+            model_dir,
+            unk_token="[UNK]",
+            pad_token="[PAD]",
+            word_delimiter_token="|",
+            target_lang=args.language
+        )
+        if args.push_to_hub:
+            # Save the tokenizer
+            tokenizer.push_to_hub(args.repo_name)
+        print("Tokenizer prepared.")
     
-    print("Preparing the tokenizer...")
-    # tokenizer = Wav2Vec2CTCTokenizer(
-    #     vocab_file=vocab_file,
-    #     unk_token="[UNK]",
-    #     pad_token="[PAD]",
-    #     word_delimiter_token="|",
-    #     target_lang=args.language
-    # )
-    tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
-        model_dir,
-        unk_token="[UNK]",
-        pad_token="[PAD]",
-        word_delimiter_token="|",
-        target_lang=args.language
-    )
-    if args.push_to_hub:
-        # Save the tokenizer
-        tokenizer.push_to_hub(args.repo_name)
-    print("Tokenizer prepared.")
-    
-    print("Defining the feature extractor...")
-    feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1,
-        sampling_rate=16000,
-        padding_value=0.0,
-        do_normalize=True,
-        return_attention_mask=True
-    )
-    print("Feature extractor defined.")
-    
-    print("Defining the processor...")
-    processor = Wav2Vec2Processor(
-        feature_extractor=feature_extractor,
-        tokenizer=tokenizer
-    )
-    print("Processor defined.")
+        print("Defining the feature extractor...")
+        feature_extractor = Wav2Vec2FeatureExtractor(
+            feature_size=1,
+            sampling_rate=16000,
+            padding_value=0.0,
+            do_normalize=True,
+            return_attention_mask=True
+        )
+        print("Feature extractor defined.")
+        
+        print("Defining the processor...")
+        processor = Wav2Vec2Processor(
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer
+        )
+        print("Processor defined.")
     
     if (args.pitch_shift or args.add_background_noise or args.time_stretch):
         augment_methods = [
