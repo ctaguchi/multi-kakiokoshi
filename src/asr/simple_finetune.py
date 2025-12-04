@@ -35,6 +35,7 @@ import dotenv
 from pathlib import Path
 import warnings
 import gc
+import copy
 
 
 dotenv.load_dotenv() # Load the .env variables
@@ -887,9 +888,9 @@ def main(args: argparse.Namespace) -> None:
             superlong_train = superlong_train.map(normalize_text_official)
         # Max long version
         if args.train_with_maxlong_samples: # original length; this'll be a MUST because the dev set is case-sensitive
-            max_train = train.copy()
-            max_train = max_train.filter(has_transcription)
-            max_train = max_train.map(normalize_text_official)
+            max_train = train.filter(has_transcription)
+            max_train = train.map(normalize_text_official,
+                                  remove_columns=["segments"])
         
         if args.train_with_original_only:
             train = max_train
