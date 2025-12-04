@@ -747,7 +747,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
               output_dir: str,
               args: argparse.Namespace) -> None:
     """The training phase."""
-    if mode == "main":
+    if mode == "main" or args.train_with_original_only:
         batch_size = args.batch_size
         num_train_epochs = args.epoch
         
@@ -792,7 +792,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         batch_size = args.superlong_batch_size
         num_train_epochs = args.superlong_epoch
         model = Wav2Vec2ForCTC.from_pretrained(output_dir)
-    elif mode == "maxlong":
+    elif mode == "maxlong" and not args.train_with_original_only:
         batch_size = args.maxlong_batch_size
         num_train_epochs = args.maxlong_epoch
         model = Wav2Vec2ForCTC.from_pretrained(output_dir)
