@@ -139,7 +139,7 @@ def main(args: argparse.Namespace):
     with open(vocab_file, "r") as f:
         vocab = json.load(f)
     
-    flat_vocab = build_flat_vocab(vocab)
+    flat_vocab = build_flat_vocab(vocab, lang=args.language)
     tmp_vocab_path = "vocab.json.tmp"
     with open(tmp_vocab_path, "w") as f:
         json.dump(flat_vocab, f, ensure_ascii=False)
