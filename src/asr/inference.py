@@ -1,4 +1,4 @@
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, AutoProcessor
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 import torch
 import pandas as pd
 from datasets import Dataset, Audio
@@ -7,6 +7,8 @@ import argparse
 import os
 from typing import List, Dict, Any
 import glob
+import tempfile
+import json
 
 
 TEST_DATA_DIR = "data/mdc_asr_shared_task_test_data"
@@ -90,10 +92,29 @@ def main(args: argparse.Namespace):
     if not os.path.exists(os.path.join(args.model, "vocab.json")):
         # It is a checkpoint; look for the upper folder
         model_dir_with_vocab = os.path.dirname(args.model)
+        vocab_file = os.path.join(os.path.dirname(args.model), "vocab.json")
     else:
         model_dir_with_vocab = args.model
+        vocab_file = os.path.join(args.model, "vocab.json")
+    
+    with open(vocab_file, "r") as f:
+        vocab = json.load(f)
+    
+    # make temporary flat vocab file
+    # 3. Create a temp directory
+    tmpdir = tempfile.TemporaryDirectory()  # persists until object deleted
+    tmp_path = tmpdir.name
+
+    # 4. Write new vocab.json
+    out_vocab_path = os.path.join(tmp_path, "vocab.json")
+    with open(out_vocab_path, "w") as f:
+        json.dump(vocab, f, ensure_ascii=False)
+        
+    
     # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
-    processor = AutoProcessor.from_pretrained(model_dir_with_vocab)
+    
+    # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+    processor = Wav2Vec2Processor.from_pretrained(tmp_path)
     processor.tokenizer.set_target_lang(args.language)
     
     # Load the test data
