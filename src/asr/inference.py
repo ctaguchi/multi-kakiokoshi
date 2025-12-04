@@ -7,7 +7,7 @@ import argparse
 import os
 from typing import List, Dict, Any
 import glob
-import tempfile
+import shutil
 import json
 
 
@@ -81,6 +81,45 @@ def batched_prediction(batch: Dict[str, Any],
     return batch
 
 
+def load_processor_with_temp_vocab(model_dir, temp_vocab_path):
+    """
+    model_dir: directory with the checkpoint (may NOT contain the vocab you want)
+    temp_vocab_path: path to the 'real' vocab.json you want to use
+    """
+
+    vocab_in_model = os.path.join(model_dir, "vocab.json")
+    backup_path     = vocab_in_model + ".bak"
+
+    # Step 1 — rename/delete existing vocab if it exists
+    if os.path.exists(vocab_in_model):
+        os.rename(vocab_in_model, backup_path)
+
+    # Step 2 — copy the "correct" vocab.json into the model directory
+    shutil.copy(temp_vocab_path, vocab_in_model)
+
+    try:
+        # Step 3 — load processor from model_dir
+        processor = Wav2Vec2Processor.from_pretrained(model_dir)
+    
+    finally:
+        # Step 4 — restore: remove temporary vocab.json
+        if os.path.exists(vocab_in_model):
+            os.remove(vocab_in_model)
+
+        # Step 5 — restore original vocab if it existed
+        if os.path.exists(backup_path):
+            os.rename(backup_path, vocab_in_model)
+
+    return processor
+
+
+def build_flat_vocab(nested_vocab, lang):
+    flat = nested_vocab[lang]
+    # make sure it's sorted by ID
+    flat = {k: int(v) for k, v in flat.items()}
+    return flat
+
+
 def main(args: argparse.Namespace):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
@@ -100,21 +139,29 @@ def main(args: argparse.Namespace):
     with open(vocab_file, "r") as f:
         vocab = json.load(f)
     
+    flat_vocab = build_flat_vocab(vocab)
+    tmp_vocab_path = "vocab.json.tmp"
+    with open(tmp_vocab_path, "w") as f:
+        json.dump(flat_vocab, f, ensure_ascii=False)
+    
+    processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
+                                               temp_vocab_path=tmp_vocab_path)
+    
     # make temporary flat vocab file
     # 3. Create a temp directory
-    tmpdir = tempfile.TemporaryDirectory()  # persists until object deleted
-    tmp_path = tmpdir.name
+    # tmpdir = tempfile.TemporaryDirectory()  # persists until object deleted
+    # tmp_path = tmpdir.name
 
-    # 4. Write new vocab.json
-    out_vocab_path = os.path.join(tmp_path, "vocab.json")
-    with open(out_vocab_path, "w") as f:
-        json.dump(vocab, f, ensure_ascii=False)
+    # # 4. Write new vocab.json
+    # out_vocab_path = os.path.join(tmp_path, "vocab.json")
+    # with open(out_vocab_path, "w") as f:
+    #     json.dump(vocab, f, ensure_ascii=False)
         
     
     # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     
     # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
-    processor = Wav2Vec2Processor.from_pretrained(tmp_path)
+    # processor = Wav2Vec2Processor.from_pretrained(tmp_path)
     processor.tokenizer.set_target_lang(args.language)
     
     # Load the test data
