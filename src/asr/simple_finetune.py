@@ -1129,7 +1129,7 @@ def main(args: argparse.Namespace) -> None:
                     args=args)
         elif args.train_with_original_only:
             run_train(mode="maxlong",
-                    train_dataset=train,
+                    train_dataset=datasetdict["train"],
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
                     compute_metrics=compute_metrics,
