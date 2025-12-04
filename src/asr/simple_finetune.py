@@ -1049,7 +1049,7 @@ def main(args: argparse.Namespace) -> None:
         max_train = max_train.map(prepare_dataset,
                                   fn_kwargs={"augmentor": augmentor,
                                                          "processor": processor},
-                                              remove_columns=superlong_train.column_names)
+                                              remove_columns=max_train.column_names)
         if args.mix_long_short and not args.run_original_at_end:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], max_train])
     print("Dataset formatted.")
