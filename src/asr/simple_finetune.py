@@ -942,7 +942,7 @@ def main(args: argparse.Namespace) -> None:
         dev = datasetdict["dev"]
         if args.maximize_training_data:
             # just leave 1000 samples for dev and test
-            threshold = min(1000, len(dev) * 0.5)
+            threshold = min(1000, int(len(dev) * 0.5))
             test = datasetdict["test"]
             other = datasetdict["other"]
             dev_train = Dataset.from_dict(dev[threshold:]).cast_column("audio", Audio(sampling_rate=16000))
