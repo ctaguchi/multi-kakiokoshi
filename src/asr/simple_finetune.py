@@ -22,6 +22,7 @@ import jiwer
 import numpy as np
 import huggingface_hub
 import regex
+import re
 import unicodedata
 import torch.nn as nn
 
@@ -49,6 +50,7 @@ SSCLangs = [ # Languages to be trained with Spontaneous Speech Corpus data
 CVLangs = [ # Languages to be trained with Common Voice data
     "ady", "bas", "kbd", "qxp", "ush"
 ]
+UNCASED_LANGS = ["ukv"]
 USERNAME = "ctaguchi"
 DATA_COLUMNS = ["client_id", "audio_id", "audio_file", "duration_ms", "prompt_id",
                 "prompt", "transcription", "votes", "age", "gender", "language",
@@ -247,6 +249,23 @@ def get_args() -> argparse.Namespace:
         help="Train with superlong samples (~10seconds)"
     )
     parser.add_argument(
+        "--train_with_maxlong_samples",
+        action="store_true",
+        help="Train with maximum-length (original) samples."
+    )
+    parser.add_argument(
+        "--maxlong_batch_size",
+        type=int,
+        default=1,
+        help="Batch size for the original audio training."
+    )
+    parser.add_argument(
+        "--maxlong_epoch",
+        type=int,
+        default=1,
+        help="Number of epochs for the original audio samples."
+    )
+    parser.add_argument(
         "--superlong_batch_size",
         type=int,
         default=1,
@@ -279,6 +298,11 @@ def get_args() -> argparse.Namespace:
         "--use_jw_data",
         action="store_true",
         help="If set, additional training data will be loaded."
+    )
+    parser.add_argument(
+        "--run_original_at_end",
+        action="store_true",
+        help="If set, training with the original dataset will be run at the end"
     )
     
     return parser.parse_args()
@@ -512,6 +536,25 @@ def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
     return batch
 
 
+BRACKETED = re.compile(r"\[[^\]]+\]")
+UNINTELL_PAREN = re.compile(r"\(\?+\)")
+REPL_PUNC = re.compile('[,?¿¡!";:]+')
+MULTISPACE = re.compile("  +")
+
+def normalize_text_official(batch: Dict[str, Any]) -> Dict[str, Any]:
+    """Official normalization used by the shared task."""
+    t = batch["transcription"]
+    t = re.sub(BRACKETED, " ", t)
+    t = re.sub(UNINTELL_PAREN, " ", t)
+    t = t.replace(" ... ", " ")
+    t = t.replace("#x27;", "'")
+    t = re.sub(REPL_PUNC, " ", t)
+    t = t.replace("...", "!ELLIPSIS!").replace(".", " ").replace("!ELLIPSIS!", "...")
+    t = re.sub(MULTISPACE, " ", t)
+    batch["transcription"] = t
+    return batch
+
+
 def get_vocab_from_dataset(datasetdict: DatasetDict,
                            orthographic: bool = True,
                            language: Optional[str] = None) -> Dict[str, int]:
@@ -689,7 +732,7 @@ def make_compute_metrics(processor: Wav2Vec2Processor):
     return compute_metrics
 
 
-def run_train(mode: Literal["main", "long", "superlong"],
+def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
               train_dataset: Dataset,
               eval_dataset: Dataset,
               data_collator,
@@ -742,6 +785,10 @@ def run_train(mode: Literal["main", "long", "superlong"],
     elif mode == "superlong":
         batch_size = args.superlong_batch_size
         num_train_epochs = args.superlong_epoch
+        model = Wav2Vec2ForCTC.from_pretrained(output_dir)
+    elif mode == "maxlong":
+        batch_size = args.maxlong_batch_size
+        num_train_epochs = args.maxlong_epoch
         model = Wav2Vec2ForCTC.from_pretrained(output_dir)
     else:
         raise ValueError
@@ -818,8 +865,9 @@ def main(args: argparse.Namespace) -> None:
             )
             # Sample cleaning
             long_train = long_train.filter(has_transcription)
-            long_train = long_train.map(normalize_text,
-                                        batched=True)
+            # long_train = long_train.map(normalize_text,
+            #                             batched=True)
+            long_train = long_train.map(normalize_text_official)
         # Superlong version
         if args.train_with_superlong_samples:
             superlong_train = combine_segments_in_dataset(
@@ -829,8 +877,14 @@ def main(args: argparse.Namespace) -> None:
             )
             # Sample cleaning
             superlong_train = superlong_train.filter(has_transcription)
-            superlong_train = superlong_train.map(normalize_text,
-                                                  batched=True)
+            # superlong_train = superlong_train.map(normalize_text,
+            #                                       batched=True)
+            superlong_train = superlong_train.map(normalize_text_official)
+        # Max long version
+        if args.train_with_maxlong_samples: # original length; this'll be a MUST because the dev set is case-sensitive
+            max_train = train.copy()
+            max_train = max_train.filter(has_transcription)
+            max_train = max_train.map(normalize_text_official)
         
         print("Collapsing segments...")
         train = train.map(batch_collapse_segments,
@@ -873,10 +927,12 @@ def main(args: argparse.Namespace) -> None:
     
     # Text normalization
     print("Normalizing the text...")
-    train = train.map(normalize_text,
-                      batched=True)
-    dev = dev.map(normalize_text,
-                  batched=True)
+    # train = train.map(normalize_text,
+    #                   batched=True)
+    train = train.map(normalize_text_official)
+    # dev = dev.map(normalize_text,
+    #               batched=True)
+    dev = dev.map(normalize_text_official)
     print("Text normalized.")
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
@@ -974,6 +1030,13 @@ def main(args: argparse.Namespace) -> None:
                                               remove_columns=superlong_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], superlong_train])
+    if args.train_with_maxlong_samples:
+        max_train = max_train.map(prepare_dataset,
+                                  fn_kwargs={"augmentor": augmentor,
+                                                         "processor": processor},
+                                              remove_columns=superlong_train.column_names)
+        if args.mix_long_short and not args.run_original_at_end:
+            datasetdict["train"] = concatenate_datasets([datasetdict["train"], max_train])
     print("Dataset formatted.")
     
     print("*** DEBUG ***")
@@ -1035,6 +1098,17 @@ def main(args: argparse.Namespace) -> None:
               output_dir=output_dir,
               processor=processor,
               args=args)
+        
+    if args.train_with_maxlong_samples and args.run_original_at_end:
+        print("Starting the training with the original dataset.")
+        run_train(mode="maxlong",
+                  train_dataset=max_train,
+                  eval_dataset=datasetdict["dev"],
+                  data_collator=data_collator,
+                  compute_metrics=compute_metrics,
+                  output_dir=output_dir,
+                  processor=processor,
+                  args=args)
         
     wandb.finish()
 
