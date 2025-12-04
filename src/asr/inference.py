@@ -183,8 +183,7 @@ def main(args: argparse.Namespace):
                                         "model": model,
                                         "processor": processor,
                                         "device": device
-                                    },
-                                    load_from_cache_file=False,)
+                                    })
     print(test_dataset.column_names)
     preds: List[str] = test_dataset["pred_str"]
     
