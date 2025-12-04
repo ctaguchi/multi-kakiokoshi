@@ -450,7 +450,8 @@ def combine_segments_in_dataset(dataset: Dataset,
                 if end_t - start_t > min_length or i == len(segments) - 1:
                     if i == len(segments) - 1 and combine_last:
                         start_idx = prev_start_idx
-                        combined_dataset.pop() # remove the previous segment
+                        if len(combined_dataset) >= 1:
+                            combined_dataset.pop() # remove the previous segment
                         
                     segment_audio, sr, text = combine_segments(
                         dataset=dataset,
