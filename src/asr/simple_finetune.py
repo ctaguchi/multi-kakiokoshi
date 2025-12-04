@@ -455,6 +455,8 @@ def combine_segments_in_dataset(dataset: Dataset,
     combined_dataset = []
     if width:
         for sample_idx, sample in enumerate(dataset):
+            if len(sample["segments"]) == 0:
+                continue
             for i in range(0, len(sample["segments"]), width):
                 if i + width - 1 > len(sample["segments"]) - 1 and combine_last: # combine the last one
                     end_idx = len(sample["segments"]) - 1
@@ -485,7 +487,10 @@ def combine_segments_in_dataset(dataset: Dataset,
             segments = sample["segments"]
             prev_start_idx = 0
             start_idx = 0
-            start_t = segments[start_idx]["start"]
+            if len(segments) >= 1:
+                start_t = segments[start_idx]["start"]
+            else: # no segment; move on
+                continue
             
             for i in range(len(segments)):
                 end_t = sample["segments"][i]["end"]
