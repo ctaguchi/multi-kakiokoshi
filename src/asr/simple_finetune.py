@@ -908,8 +908,7 @@ def main(args: argparse.Namespace) -> None:
         
         if args.train_with_original_only:
             train = max_train
-            dev = dev.map(lambda x: x,
-                          remove_columns=["segments"])
+            dev = dev.remove_columns(["segments"])
             dev = dev.filter(is_short_enough)
             print("Original data prepared.")
             
@@ -934,7 +933,7 @@ def main(args: argparse.Namespace) -> None:
             assert not (args.use_jw_data and args.train_with_original_only), "args.use_jw_data and args.train_with_original_only cannot be True at the same time."
             print("Loading the additional data...")
             additional_dataset_name = f"jw_{args.language}"
-            additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"]
+            additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"].remove_columns(["path"])
             train = concatenate_datasets([train, additional_train])
             print("Additional data loaded and concatenated to the main train set.")
     
