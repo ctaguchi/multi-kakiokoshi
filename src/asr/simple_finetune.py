@@ -556,7 +556,7 @@ def normalize_text(batch: Dict[str, Any]) -> Dict[str, Any]:
 
 BRACKETED = re.compile(r"\[[^\]]+\]")
 UNINTELL_PAREN = re.compile(r"\(\?+\)")
-REPL_PUNC = re.compile('[,?¿¡!";:]+')
+REPL_PUNC = re.compile('[,?¿¡!";:»«“”]+') # »«“” were added by the user
 MULTISPACE = re.compile("  +")
 
 def normalize_text_official(batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -931,6 +931,7 @@ def main(args: argparse.Namespace) -> None:
         
         # Additional training data
         if args.use_jw_data:
+            assert not (args.use_jw_data and args.train_with_original_only), "args.use_jw_data and args.train_with_original_only cannot be True at the same time."
             print("Loading the additional data...")
             additional_dataset_name = f"jw_{args.language}"
             additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"]
