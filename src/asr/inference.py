@@ -175,7 +175,8 @@ def main(args: argparse.Namespace):
                                         "model": model,
                                         "processor": processor,
                                         "device": device
-                                    })
+                                    },
+                                    load_from_cache_file=False,)
     preds: List[str] = test_dataset["pred_str"]
     
     # Load the test tsv sheet
