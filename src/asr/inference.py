@@ -144,8 +144,8 @@ def main(args: argparse.Namespace):
     with open(tmp_vocab_path, "w") as f:
         json.dump(flat_vocab, f, ensure_ascii=False)
     
-    # processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
-    #                                            temp_vocab_path=tmp_vocab_path)
+    processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
+                                               temp_vocab_path=tmp_vocab_path)
     
     # make temporary flat vocab file
     # 3. Create a temp directory
@@ -158,11 +158,11 @@ def main(args: argparse.Namespace):
     #     json.dump(vocab, f, ensure_ascii=False)
         
     
-    processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+    # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     
     # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     # processor = Wav2Vec2Processor.from_pretrained(tmp_path)
-    processor.tokenizer.set_target_lang(args.language)
+    # processor.tokenizer.set_target_lang(args.language)
     
     # Load the test data
     test_dataset = load_testdata(test_data_dir=TEST_DATA_DIR, language=args.language)
