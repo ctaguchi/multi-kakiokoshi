@@ -757,6 +757,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
               processor,
               compute_metrics: Callable,
               output_dir: str,
+              last_step: Optional[int],
               args: argparse.Namespace) -> None:
     """The training phase."""
     if mode == "main" or args.train_with_original_only:
@@ -853,16 +854,23 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         tokenizer=processor.feature_extractor,
     )
     
+    if last_step is not None: # hacky
+        trainer.state.global_step = last_step
+        trainer._globalstep_last_logged = last_step
+    
     print("Training started.")
     trainer.train()
     trainer.save_model() # will be saved to `output_dir`
+    
+    # keep track of the number of steps
+    last_step = trainer.state.global_step
     
     # the trainer won't be used in the next stage
     del trainer
     gc.collect()
     torch.cuda.empty_cache()
     
-    return model
+    return model, last_step
 
 
 def main(args: argparse.Namespace) -> None:
@@ -1103,59 +1111,66 @@ def main(args: argparse.Namespace) -> None:
     wandb.login(key=wandb_api_key)
     run = wandb.init(project=args.wandb_project, name=args.wandb_run_name)
     
+    last_step = None
+    
     if not args.train_with_original_only:
         # Run training with smallest segmented audio
-        model = run_train(mode="main",
+        model, last_step = run_train(mode="main",
             train_dataset=datasetdict["train"],
             eval_dataset=datasetdict["dev"],
             data_collator=data_collator,
             compute_metrics=compute_metrics,
             output_dir=output_dir,
             processor=processor,
+            last_step=last_step,
             args=args)
         print("Main training done.")
     
     if args.train_with_longer_samples and not args.mix_long_short:
         print("Starting the training with the long dataset.")
-        model = run_train(mode="long",
+        model, last_step = run_train(mode="long",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
               compute_metrics=compute_metrics,
               output_dir=output_dir,
               processor=processor,
+              last_step=last_step,
               args=args)
     
     if args.train_with_superlong_samples and not args.mix_long_short:
         print("Starting the training with the superlong dataset.")
-        model = run_train(mode="superlong",
+        model, last_step= run_train(mode="superlong",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
               compute_metrics=compute_metrics,
               output_dir=output_dir,
               processor=processor,
+              last_step=last_step,
               args=args)
         
     if args.train_with_maxlong_samples:
         print("Starting the training with the original dataset.")
         if args.run_original_at_end:
-            model = run_train(mode="maxlong",
+            model, last_step = run_train(mode="maxlong",
                     train_dataset=max_train,
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
                     compute_metrics=compute_metrics,
                     output_dir=output_dir,
                     processor=processor,
+                    last_step=last_step,
                     args=args)
         elif args.train_with_original_only:
-            model = run_train(mode="maxlong",
+            model,last_step = run_train(mode="maxlong",
                     train_dataset=datasetdict["train"],
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
                     compute_metrics=compute_metrics,
                     output_dir=output_dir,
                     processor=processor,
+                    last_step=last_step,
                     args=args)
     
     adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(args.language)
