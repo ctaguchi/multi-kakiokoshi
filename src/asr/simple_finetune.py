@@ -417,7 +417,8 @@ def combine_segments_in_dataset(dataset: Dataset,
                 if i + width - 1 > len(sample["segments"]) - 1 and combine_last: # combine the last one
                     end_idx = len(sample["segments"]) - 1
                     start_idx = max(0, i - width)
-                    combined_dataset.pop()
+                    if len(combined_dataset) >= 1:
+                        combined_dataset.pop()
                 else:
                     end_idx = i + width - 1
                     start_idx = i
@@ -851,7 +852,7 @@ def main(args: argparse.Namespace) -> None:
             print("Additional data loaded and concatenated to the main train set.")
     
     elif args.language in CVLangs:
-        train = datasetdict["train"]
+        train = datasetdict["train"] # kbd CV data contains JW data by default
         dev = datasetdict["dev"]
         if args.maximize_training_data:
             # just leave 1000 samples for dev and test
