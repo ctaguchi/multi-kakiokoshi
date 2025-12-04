@@ -84,7 +84,7 @@ def main(args: argparse.Namespace):
     
     model = Wav2Vec2ForCTC.from_pretrained(
         args.model,
-        target_lang=args.language
+        # target_lang=args.language
     ).to(device)
     
     if not os.path.exists(os.path.join(args.model, "vocab.json")):
