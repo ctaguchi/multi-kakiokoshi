@@ -1011,7 +1011,10 @@ def main(args: argparse.Namespace) -> None:
         vocab = get_vocab_from_dataset(datasetdict,
                                     language=args.language,
                                     orthographic=True)
-        vocab_dict = {args.language: vocab}
+        if args.model == "facebook/mms-1b-all":
+            vocab_dict = {args.language: vocab}
+        elif args.model in XLSR_MODELS:
+            vocab_dict = vocab
         # save vocab
         model_dir = os.path.join(MODEL_DIR, args.repo_name)
         vocab_file = os.path.join(model_dir, "vocab.json")
