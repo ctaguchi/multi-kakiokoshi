@@ -854,6 +854,8 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         report_to=["wandb"],
         run_name=args.wandb_run_name,
         load_best_model_at_end=True,
+        metric_for_best_model="wer",
+        greater_is_better=False,
     )
     
     trainer = Trainer(
