@@ -13,6 +13,7 @@ import json
 
 TEST_DATA_DIR = "src/data/mdc_asr_shared_task_test_data"
 TEST_RESULTS_DIR = "src/data/test_results/"
+UNSEEN = ["ady", "bas", "kbd", "qxp", "ush"]
 
 
 def get_args() -> argparse.Namespace:
@@ -47,6 +48,11 @@ def get_args() -> argparse.Namespace:
         "--batch_size",
         type=int,
         help="Evaluation batch size."
+    )
+    parser.add_argument(
+        "--use_tmp_vocab",
+        action="store_true",
+        help="Use temporary vocab file."
     )
     return parser.parse_args()
 
@@ -150,8 +156,12 @@ def main(args: argparse.Namespace):
     with open(tmp_vocab_path, "w") as f:
         json.dump(flat_vocab, f, ensure_ascii=False)
     
-    processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
-                                               temp_vocab_path=tmp_vocab_path)
+    if args.use_tmp_vocab:
+        processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
+                                                   temp_vocab_path=tmp_vocab_path)
+    else:
+        processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+        processor.tokenizer.set_target_lang(args.language)
     
     # make temporary flat vocab file
     # 3. Create a temp directory
@@ -166,9 +176,9 @@ def main(args: argparse.Namespace):
     
     # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     
-    # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+    # 
     # processor = Wav2Vec2Processor.from_pretrained(tmp_path)
-    # processor.tokenizer.set_target_lang(args.language)
+    # 
     
     # Load the test data
     test_dataset = load_testdata(test_data_dir=TEST_DATA_DIR, language=args.language)
