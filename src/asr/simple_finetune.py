@@ -822,7 +822,10 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         raise ValueError
     
     if args.freeze_feature_encoder:
-        model.freeze_base_model() # prevents overfitting, faster training
+        if args.model == "facebook/mms-1b-all":
+            model.freeze_base_model() # prevents overfitting, faster training
+        elif args.model in XLSR_MODELS:
+            model.freeze_feature_encoder()
         
     if args.init_adapter_layer:
         adapter_weights = model._get_adapters()
