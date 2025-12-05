@@ -61,6 +61,7 @@ DATA_COLUMNS = ["client_id", "audio_id", "audio_file", "duration_ms", "prompt_id
 DISCARDED_COLUMNS = ["client_id", "audio_id", "audio_file", "duration_ms", "prompt_id",
                      "prompt", "votes", "age", "gender", "language", "split",
                      "char_per_sec", "quality_tags"]
+XLSR_MODELS = ["facebook/wav2vec2-xls-r-300m", "facebook/wav2vec2-large-xlsr-53"]
 Feature = Dict[str, Union[List[int], torch.Tensor]]
 
 
@@ -72,6 +73,9 @@ def get_args() -> argparse.Namespace:
         "--model",
         type=str,
         required=True,
+        choices=["facebook/mms-1b-all",
+                 "facebook/wav2vec2-xls-r-300m",
+                 "facebook/wav2vec2-large-xlsr-53"],
         help="Pretrained model."
     )
     parser.add_argument(
@@ -867,10 +871,14 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     trainer.train()
     trainer.save_model() # will be saved to `output_dir`
     
-    adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(args.language)
-    adapter_file = os.path.join(output_dir, adapter_file)
-    safe_save_file(model._get_adapters(), adapter_file, metadata={"format": "pt"})
-    trainer.push_to_hub()
+    if args.model == "facebook/mms-1b-all":
+        # Save the adapter
+        adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(args.language)
+        adapter_file = os.path.join(output_dir, adapter_file)
+        safe_save_file(model._get_adapters(), adapter_file, metadata={"format": "pt"})
+    
+    if args.push_to_hub:
+        trainer.push_to_hub()
     
     # keep track of the number of steps
     last_step = trainer.state.global_step
@@ -988,6 +996,7 @@ def main(args: argparse.Namespace) -> None:
     
     # Tokenizer/Processor
     if args.adapter_lang:
+        assert args.model not in XLSR_MODELS, "xlsr models do not support adapters."
         print(f"Using the pretrained adapter for {args.adapter_lang}...")
         processor = Wav2Vec2Processor.from_pretrained(args.model)
         processor.tokenizer.set_target_lang(args.adapter_lang)
@@ -1016,13 +1025,24 @@ def main(args: argparse.Namespace) -> None:
         #     word_delimiter_token="|",
         #     target_lang=args.language
         # )
-        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
-            model_dir,
-            unk_token="[UNK]",
-            pad_token="[PAD]",
-            word_delimiter_token="|",
-            target_lang=args.language
-        )
+        if args.model in XLSR_MODELS:
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+                model_dir,
+                unk_token="[UNK]",
+                pad_token="[PAD]",
+                word_delimiter_token="|",
+            )
+        elif args.model == "facebook/mms-1b-all":
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+                model_dir,
+                unk_token="[UNK]",
+                pad_token="[PAD]",
+                word_delimiter_token="|",
+                target_lang=args.language
+            )
+        else:
+            raise ValueError(f"Unrecognized model: {args.model}")
+            
         if args.push_to_hub:
             # Save the tokenizer
             tokenizer.push_to_hub(args.repo_name)
