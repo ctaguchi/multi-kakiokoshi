@@ -848,7 +848,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         learning_rate=args.learning_rate,
         warmup_steps=args.warmup_steps,
         save_total_limit=2,
-        push_to_hub=args.push_to_hub,
+        push_to_hub=False, # If args.push_to_hub is True, then it will be pushed later; see code below
         hub_model_id=args.repo_name,
         hub_token=os.environ["HF_TOKEN"],
         report_to=["wandb"],
