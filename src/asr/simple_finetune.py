@@ -868,9 +868,9 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         tokenizer=processor.feature_extractor,
     )
     
-    if last_step is not None: # hacky
-        trainer.state.global_step = last_step
-        trainer._globalstep_last_logged = last_step
+    # if last_step is not None: # hacky
+    #     trainer.state.global_step = last_step
+    #     trainer._globalstep_last_logged = last_step
     
     print("Training started.")
     trainer.train()
@@ -893,7 +893,8 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     gc.collect()
     torch.cuda.empty_cache()
     
-    return last_step
+    # return last_step
+    return
 
 
 def main(args: argparse.Namespace) -> None:
@@ -1153,7 +1154,7 @@ def main(args: argparse.Namespace) -> None:
     
     if not args.train_with_original_only:
         # Run training with smallest segmented audio
-        last_step = run_train(mode="main",
+        run_train(mode="main",
             train_dataset=datasetdict["train"],
             eval_dataset=datasetdict["dev"],
             data_collator=data_collator,
@@ -1166,7 +1167,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_longer_samples and not args.mix_long_short:
         print("Starting the training with the long dataset.")
-        last_step = run_train(mode="long",
+        run_train(mode="long",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -1178,7 +1179,7 @@ def main(args: argparse.Namespace) -> None:
     
     if args.train_with_superlong_samples and not args.mix_long_short:
         print("Starting the training with the superlong dataset.")
-        last_step= run_train(mode="superlong",
+        run_train(mode="superlong",
               train_dataset=long_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
@@ -1201,7 +1202,7 @@ def main(args: argparse.Namespace) -> None:
                     last_step=last_step,
                     args=args)
         elif args.train_with_original_only:
-            last_step = run_train(mode="maxlong",
+            run_train(mode="maxlong",
                     train_dataset=datasetdict["train"],
                     eval_dataset=datasetdict["dev"],
                     data_collator=data_collator,
