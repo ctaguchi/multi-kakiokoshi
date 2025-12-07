@@ -257,14 +257,19 @@ def main(args: argparse.Namespace):
     # Run inference
     print("Running the inference...")
     if args.no_batching:
-        preds = []
-        for sample in test_dataset:
-            array = sample["audio"]["array"]
-            pred_str = transcribe(array=array,
-                                  processor=processor,
-                                  model=model,
-                                  device=device)
-            preds.append(pred_str)
+        arrays = [sample["audio"]["array"] for sample in test_dataset]
+        preds = transcribe(array=arrays,
+                           processor=processor,
+                           model=model,
+                           device=device)
+        # preds = []
+        # for sample in test_dataset:
+        #     array = sample["audio"]["array"]
+        #     pred_str = transcribe(array=array,
+        #                           processor=processor,
+        #                           model=model,
+        #                           device=device)
+        #     preds.append(pred_str)
     else:
         test_dataset = test_dataset.map(batched_prediction,
                                         batched=True,
