@@ -135,10 +135,15 @@ def build_flat_vocab(nested_vocab, lang):
 def main(args: argparse.Namespace):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    model = Wav2Vec2ForCTC.from_pretrained(
-        args.model,
-        target_lang=args.language
-    ).to(device)
+    if args.task_type == "small_model":
+        model = Wav2Vec2ForCTC.from_pretrained(
+            args.model,
+        ).to(device)
+    else:
+        model = Wav2Vec2ForCTC.from_pretrained(
+            args.model,
+            target_lang=args.language
+        ).to(device)
     
     if not os.path.exists(os.path.join(args.model, "vocab.json")):
         # It is a checkpoint; look for the upper folder
