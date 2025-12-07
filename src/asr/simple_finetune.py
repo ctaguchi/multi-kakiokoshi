@@ -991,8 +991,8 @@ def main(args: argparse.Namespace) -> None:
     
     if args.use_english_dialects_data:
         assert args.language == "sco", f"The target language (args.language) needs to be sco but we got {args.language}"
-        sco_m = load_dataset("ylacombe/english_dialects", "scottish_male")
-        sco_f = load_dataset("ylacombe/english_dialects", "scottish_female")
+        sco_m = load_dataset("ylacombe/english_dialects", "scottish_male").rename_column("text", "transcription").remove_columns(["line_id", "speaker_id"]).cast_column("audio", Audio(sampling_rate=16000))["train"]
+        sco_f = load_dataset("ylacombe/english_dialects", "scottish_female").rename_column("text", "transcription").remove_columns(["line_id", "speaker_id"]).cast_column("audio", Audio(sampling_rate=16000))["train"]
         train = concatenate_datasets([train, sco_m, sco_f])
         print("Additional data from english_dialects loaded and concatenated to the main train set.")
     
