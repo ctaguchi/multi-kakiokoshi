@@ -156,7 +156,7 @@ def main(args: argparse.Namespace):
     with open(vocab_file, "r") as f:
         vocab = json.load(f)
     
-    if args.task_type == "small_model":
+    if args.task_type == "small-model":
         processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     else:
         # MMS-style
