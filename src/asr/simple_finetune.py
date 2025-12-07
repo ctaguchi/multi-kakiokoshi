@@ -360,14 +360,15 @@ def load_data(language: str,
     return datasetdict
 
 
-def is_short_enough(sample: Dict[str, Any]) -> bool:
+def is_short_enough(sample: Dict[str, Any],
+                    threshold: float = 90.0) -> bool:
     """Remove samples that are too long.
     Important because dev set audios are not segmented.
     """
     sr = sample["audio"]["sampling_rate"]
     n_samples = len(sample["audio"]["array"])
     duration_sec = n_samples / sr
-    return duration_sec <= 90.0
+    return duration_sec <= threshold
 
 
 def is_long_enough(sample: Dict[str, Any]) -> bool:
@@ -937,6 +938,7 @@ def main(args: argparse.Namespace) -> None:
             max_train = train.filter(has_transcription)
             max_train = train.map(normalize_text_official,
                                   remove_columns=["segments"])
+            max_train = train.filter(is_short_enough, fn_kwargs={"threshold": 120.0}) # discard samples longer than 120 secs
         
         if args.train_with_original_only:
             train = max_train
@@ -958,16 +960,6 @@ def main(args: argparse.Namespace) -> None:
                           remove_columns=["segments"]) # we are not using segments for dev data
             dev = dev.filter(is_short_enough)
             print("Segments collapsed.")
-            
-        
-        # Additional training data
-        if args.use_jw_data:
-            assert not (args.use_jw_data and args.train_with_original_only), "args.use_jw_data and args.train_with_original_only cannot be True at the same time."
-            print("Loading the additional data...")
-            additional_dataset_name = f"jw_{args.language}"
-            additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"].remove_columns(["path"])
-            train = concatenate_datasets([train, additional_train])
-            print("Additional data loaded and concatenated to the main train set.")
     
     elif args.language in CVLangs:
         train = datasetdict["train"] # kbd CV data contains JW data by default
@@ -982,6 +974,15 @@ def main(args: argparse.Namespace) -> None:
             test_train = Dataset.from_dict(test[threshold:]).cast_column("audio", Audio(sampling_rate=16000))
             test = Dataset.from_dict(test[:threshold]).cast_column("audio", Audio(sampling_rate=16000))
             train = concatenate_datasets([train, dev_train, test_train, other])
+    
+    # Additional training data
+    if args.use_jw_data:
+        assert not (args.use_jw_data and args.train_with_original_only), "args.use_jw_data and args.train_with_original_only cannot be True at the same time."
+        print("Loading the additional data...")
+        additional_dataset_name = f"jw_{args.language}"
+        additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"].remove_columns(["path"])
+        train = concatenate_datasets([train, additional_train])
+        print("Additional data loaded and concatenated to the main train set.")
     
     # Sample cleaning
     train = train.filter(has_transcription)
