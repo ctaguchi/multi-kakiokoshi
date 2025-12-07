@@ -263,13 +263,19 @@ def main(args: argparse.Namespace):
         #                    model=model,
         #                    device=device)
         preds = []
+        paths = []
         for sample in test_dataset:
+            path = os.path.basename(sample["audio"]["path"])
+            paths.append(path)
+            
             array = sample["audio"]["array"]
             pred_str = transcribe(array=array,
                                   processor=processor,
                                   model=model,
                                   device=device)[0]
             preds.append(pred_str)
+        
+        mapping = dict(zip(paths, preds))
     else:
         test_dataset = test_dataset.map(batched_prediction,
                                         batched=True,
@@ -281,12 +287,14 @@ def main(args: argparse.Namespace):
                                         })
         print(test_dataset.column_names)
         preds: List[str] = test_dataset["pred_str"]
+        raise NotImplementedError("Batch transcription is deprecated.")
     
     # Load the test tsv sheet
     tsv_dir = os.path.join(TEST_DATA_DIR, args.task_type) # e.g. data/mdc_asr_shared_task_test_data/multilingual-general
     tsv_file = os.path.join(tsv_dir, f"{args.language}.tsv")
     tsv = pd.read_csv(tsv_file, sep="\t", index_col=False)
-    tsv["sentence"] = preds
+    tsv["sentence"] = tsv["audio_file"].map(mapping)
+    # tsv["sentence"] = preds # <- this corrupts the mapping between the file names and their transcription
     
     # Save the results
     output_dir = os.path.join(TEST_RESULTS_DIR, str(args.id), args.task_type) # e.g. data/test_results/1/multilingual-general
