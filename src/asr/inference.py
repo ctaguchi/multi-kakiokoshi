@@ -135,7 +135,7 @@ def build_flat_vocab(nested_vocab, lang):
 def main(args: argparse.Namespace):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    if args.task_type == "small_model":
+    if args.task_type == "small-model":
         model = Wav2Vec2ForCTC.from_pretrained(
             args.model,
         ).to(device)
