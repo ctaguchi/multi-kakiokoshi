@@ -151,35 +151,39 @@ def main(args: argparse.Namespace):
     with open(vocab_file, "r") as f:
         vocab = json.load(f)
     
-    flat_vocab = build_flat_vocab(vocab, lang=args.language)
-    tmp_vocab_path = "vocab.json.tmp"
-    with open(tmp_vocab_path, "w") as f:
-        json.dump(flat_vocab, f, ensure_ascii=False)
-    
-    if args.use_tmp_vocab:
-        processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
-                                                   temp_vocab_path=tmp_vocab_path)
+    if args.task_type == "small_model":
+        processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
     else:
-        # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
-        # processor.tokenizer.set_target_lang(args.language)
-        feature_extractor = Wav2Vec2FeatureExtractor(
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0.0,
-            do_normalize=True,
-            return_attention_mask=True
-        )
-        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
-            model_dir_with_vocab,
-            unk_token="[UNK]",
-            pad_token="[PAD]",
-            word_delimiter_token="|",
-            target_lang=args.language
-        )
-        processor = Wav2Vec2Processor(
-            feature_extractor=feature_extractor,
-            tokenizer=tokenizer
-        )
+        # MMS-style
+        flat_vocab = build_flat_vocab(vocab, lang=args.language)
+        tmp_vocab_path = "vocab.json.tmp"
+        with open(tmp_vocab_path, "w") as f:
+            json.dump(flat_vocab, f, ensure_ascii=False)
+        
+        if args.use_tmp_vocab:
+            processor = load_processor_with_temp_vocab(model_dir=model_dir_with_vocab,
+                                                    temp_vocab_path=tmp_vocab_path)
+        else:
+            # processor = Wav2Vec2Processor.from_pretrained(model_dir_with_vocab)
+            # processor.tokenizer.set_target_lang(args.language)
+            feature_extractor = Wav2Vec2FeatureExtractor(
+                feature_size=1,
+                sampling_rate=16000,
+                padding_value=0.0,
+                do_normalize=True,
+                return_attention_mask=True
+            )
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+                model_dir_with_vocab,
+                unk_token="[UNK]",
+                pad_token="[PAD]",
+                word_delimiter_token="|",
+                target_lang=args.language
+            )
+            processor = Wav2Vec2Processor(
+                feature_extractor=feature_extractor,
+                tokenizer=tokenizer
+            )
     
     # make temporary flat vocab file
     # 3. Create a temp directory
