@@ -285,14 +285,14 @@ def main(args: argparse.Namespace):
     # Load the test tsv sheet
     tsv_dir = os.path.join(TEST_DATA_DIR, args.task_type) # e.g. data/mdc_asr_shared_task_test_data/multilingual-general
     tsv_file = os.path.join(tsv_dir, f"{args.language}.tsv")
-    tsv = pd.read_csv(tsv_file, sep="\t")
+    tsv = pd.read_csv(tsv_file, sep="\t", index_col=False)
     tsv["sentence"] = preds
     
     # Save the results
     output_dir = os.path.join(TEST_RESULTS_DIR, str(args.id), args.task_type) # e.g. data/test_results/1/multilingual-general
     os.makedirs(output_dir, exist_ok=True)
     results_file = os.path.join(output_dir, f"{args.language}.tsv")
-    tsv.to_csv(results_file, sep="\t")
+    tsv.to_csv(results_file, sep="\t", index=False)
 
 
 if __name__ == "__main__":
