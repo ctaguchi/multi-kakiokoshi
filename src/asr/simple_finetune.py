@@ -307,6 +307,11 @@ def get_args() -> argparse.Namespace:
         help="If set, additional training data will be loaded."
     )
     parser.add_argument(
+        "--use_english_dialects_data",
+        action="store_true",
+        help="If set, additional training data from ylacombe/english_dialects will be used for Scots training."
+    )
+    parser.add_argument(
         "--run_original_at_end",
         action="store_true",
         help="If set, training with the original dataset will be run at the end"
@@ -982,7 +987,14 @@ def main(args: argparse.Namespace) -> None:
         additional_dataset_name = f"jw_{args.language}"
         additional_train = load_dataset(f"{USERNAME}/{additional_dataset_name}")["train"].remove_columns(["path"])
         train = concatenate_datasets([train, additional_train])
-        print("Additional data loaded and concatenated to the main train set.")
+        print("Additional data from JW loaded and concatenated to the main train set.")
+    
+    if args.use_english_dialects_data:
+        assert args.language == "sco", f"The target language (args.language) needs to be sco but we got {args.language}"
+        sco_m = load_dataset("ylacombe/english_dialects", "scottish_male")
+        sco_f = load_dataset("ylacombe/english_dialects", "scottish_female")
+        train = concatenate_datasets([train, sco_m, sco_f])
+        print("Additional data from english_dialects loaded and concatenated to the main train set.")
     
     # Sample cleaning
     train = train.filter(has_transcription)
