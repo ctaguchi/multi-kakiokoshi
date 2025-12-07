@@ -2,6 +2,7 @@ from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, Wav2Vec2CTCTokenizer
 import torch
 import pandas as pd
 from datasets import Dataset, Audio
+import numpy as np
 
 import argparse
 import os
@@ -54,6 +55,11 @@ def get_args() -> argparse.Namespace:
         action="store_true",
         help="Use temporary vocab file."
     )
+    parser.add_argument(
+        "--no_batching",
+        action="store_true",
+        help="Disable batching."
+    )
     return parser.parse_args()
 
 
@@ -91,6 +97,25 @@ def batched_prediction(batch: Dict[str, Any],
     batch["pred_str"] = pred_str
     
     return batch
+
+
+def transcribe(array: np.ndarray,
+               processor: Wav2Vec2Processor,
+               model: Wav2Vec2ForCTC,
+               device: str):
+    """Non-batched version"""
+    inp = processor(
+        array,
+        sampling_rate=16_000,
+        return_tensors="pt",
+        padding=True,
+    )
+    with torch.no_grad():
+        logits = model(inp.input_values.to(device)).logits
+    
+    pred_ids = torch.argmax(logits, dim=-1)
+    pred_str = processor.batch_decode(pred_ids, skip_special_tokens=True)
+    return pred_str    
 
 
 def load_processor_with_temp_vocab(model_dir, temp_vocab_path):
@@ -175,6 +200,7 @@ def main(args: argparse.Namespace):
             feature_extractor=feature_extractor,
             tokenizer=tokenizer
         )
+        print(processor)
     else:
         # MMS-style
         flat_vocab = build_flat_vocab(vocab, lang=args.language)
@@ -230,16 +256,26 @@ def main(args: argparse.Namespace):
     
     # Run inference
     print("Running the inference...")
-    test_dataset = test_dataset.map(batched_prediction,
-                                    batched=True,
-                                    batch_size=args.batch_size,
-                                    fn_kwargs={
-                                        "model": model,
-                                        "processor": processor,
-                                        "device": device
-                                    })
-    print(test_dataset.column_names)
-    preds: List[str] = test_dataset["pred_str"]
+    if args.no_batching:
+        preds = []
+        for sample in test_dataset:
+            array = sample["audio"]["array"]
+            pred_str = transcribe(array=array,
+                                  processor=processor,
+                                  model=model,
+                                  device=device)
+            preds.append(pred_str)
+    else:
+        test_dataset = test_dataset.map(batched_prediction,
+                                        batched=True,
+                                        batch_size=args.batch_size,
+                                        fn_kwargs={
+                                            "model": model,
+                                            "processor": processor,
+                                            "device": device
+                                        })
+        print(test_dataset.column_names)
+        preds: List[str] = test_dataset["pred_str"]
     
     # Load the test tsv sheet
     tsv_dir = os.path.join(TEST_DATA_DIR, args.task_type) # e.g. data/mdc_asr_shared_task_test_data/multilingual-general
