@@ -11,6 +11,35 @@ from transformers import (
 import torch
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
+import argparse
+
+
+def get_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-m",
+        "--model",
+        type=str,
+        default="openai/whisper-base.en"
+        help="Model."
+    )
+    parser.add_argument(
+        "-l",
+        "--language",
+        type=str,
+        default="sco",
+        help="Target language."
+    )
+    parser.add_argument(
+        "--repo_name",
+        type=str,
+        default="ssc-sco-whisper-base-model-max"
+    )
+    parser.add_argument(
+        "--num_proc",
+        type=int,
+        help="Number of CPU processors."
+    )
 
 
 def prepare_dataset(batch,
@@ -74,12 +103,14 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
 
 if __name__ == "__main__":
-    sco = load_dataset("ctaguchi/mcv-sps-sco-segmented", split="train")
-    train = sco.filter(lambda x: x["split"] == "train")
-    dev = sco.filter(lambda x: x["split"] == "dev")
+    args = get_args()
+    
+    ds = load_dataset("ctaguchi/mcv-sps-sco-segmented", split="train")
+    train = ds.filter(lambda x: x["split"] == "train")
+    dev = ds.filter(lambda x: x["split"] == "dev")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model_name = "openai/whisper-base.en" # 290MB, 74M params
+    model_name = args.model # 290MB, 74M params
     
     # feature_extractor = WhisperFeatureExtractor.from_pretrained(model_name)
     # tokenizer = WhisperTokenizer.from_pretrained(model_name)
@@ -96,7 +127,7 @@ if __name__ == "__main__":
     ds = DatasetDict({"train": train, "dev": dev})
     ds = ds.map(prepare_dataset,
                 remove_columns=ds.column_names["train"],
-                num_proc=4,
+                num_proc=args.num_proc,
                 fn_kwargs={"processor": processor})
 
     training_args = Seq2SeqTrainingArguments(
