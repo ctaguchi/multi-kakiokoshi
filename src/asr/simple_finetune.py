@@ -942,9 +942,9 @@ def main(args: argparse.Namespace) -> None:
         # Max long version
         if args.train_with_maxlong_samples: # original length; this'll be a MUST because the dev set is case-sensitive
             max_train = train.filter(has_transcription)
-            max_train = train.map(normalize_text_official,
+            max_train = max_train.map(normalize_text_official,
                                   remove_columns=["segments"])
-            max_train = train.filter(is_short_enough, fn_kwargs={"threshold": 120.0}) # discard samples longer than 120 secs
+            max_train = max_train.filter(is_short_enough, fn_kwargs={"threshold": 120.0}) # discard samples longer than 120 secs
             print(max_train) # dbeug
         
         if args.train_with_original_only:
