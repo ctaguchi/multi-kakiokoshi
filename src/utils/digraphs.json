@@ -2,7 +2,7 @@
     "aln": ["dh", "gj", "ll", "nj", "rr", "sh", "th", "xh", "zh"],
     "bew": ["kh", "ny", "sy"],
     "bxk": ["ch", "nd", "fw", "ng", "kh", "ly", "sh", "ny", "nj", "mb"],
-    "el-CY": [],
+    "el-CY": ["ζ̆", "σ̆"],
     "hch": ["kw", "ts"],
     "kcn": ["dh", "sh", "kh"],
     "koo": ["mb", "bb", "nd", "nt", "ts", "nz", "th", "ny", "ngy", "jj", "njj", "ky", "ng", "gh"],
