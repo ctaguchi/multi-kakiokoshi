@@ -355,6 +355,7 @@ def load_data(language: str,
             lambda x: x,
             remove_columns=DISCARDED_COLUMNS
         )
+        # or may be just: datasetdict.remove_columns(DISCARDED_COLUMNS)
     elif args.language in CVLangs:
         # Load from common voice
         dataset_name = f"common_voice_{language}"
@@ -1012,6 +1013,7 @@ def main(args: argparse.Namespace) -> None:
     print("Text normalized.")
     
     datasetdict = DatasetDict({"train": train, "dev": dev})
+    print(datasetdict) # debug
     
     # Tokenizer/Processor
     if args.adapter_lang:
@@ -1104,10 +1106,10 @@ def main(args: argparse.Namespace) -> None:
     
     print("Formatting the dataset for training...")
     datasetdict = datasetdict.map(prepare_dataset,
-                                  fn_kwargs={"augmentor": augmentor,
-                                             "processor": processor},
-                                  remove_columns=datasetdict["train"].column_names)
-    print("Short-segment dataset prepared.")
+                                fn_kwargs={"augmentor": augmentor,
+                                            "processor": processor},
+                                remove_columns=datasetdict["train"].column_names)
+    print("Main dataset prepared.")
     if args.train_with_longer_samples:
         long_train = long_train.map(prepare_dataset,
                                     fn_kwargs={"augmentor": augmentor,
