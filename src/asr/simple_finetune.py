@@ -1046,7 +1046,7 @@ def main(args: argparse.Namespace) -> None:
         elif args.model in XLSR_MODELS:
             vocab_dict = vocab
         # save vocab
-        model_dir = os.path.join(MODEL_DIR, args.repo_name)
+        model_dir = os.path.join(args.model_dir, args.repo_name)
         vocab_file = os.path.join(model_dir, "vocab.json")
         os.makedirs(model_dir, exist_ok=True)
         with open(vocab_file, "w") as f:
