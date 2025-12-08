@@ -599,6 +599,19 @@ def normalize_text_official(batch: Dict[str, Any]) -> Dict[str, Any]:
     return batch
 
 
+def normalize_text_greek(batch: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize Greek weird letters.
+    There seems to be a confusion of
+    - "σ̌" (\u03C3 + \u030C, 5 hits) and σ̆ (\u03C3 + \u0306, 1065 hits)
+    - "ζ̌" (\u03B6 + \u030C, 408 hits) and ζ̆ (\u03B6 + \u0306, 3215 hits)
+    For this reason, let's just unify them to the one with \u0306
+    """
+    t = batch["transcription"]
+    t = t.replace("\u030C", "\u0306")
+    batch["transcription"] = t
+    return batch
+
+
 def get_vocab_from_dataset(datasetdict: DatasetDict,
                            orthographic: bool = True,
                            language: Optional[str] = None) -> Dict[str, int]:
@@ -642,6 +655,8 @@ def get_vocab_from_dataset(datasetdict: DatasetDict,
     vocab["|"] = vocab[" "]
     del vocab[" "]
     
+    # Ellipsis (disfluency; only introduced in the shared task)
+    vocab["..."] = len(vocab)
     # CTC special tokens
     vocab["[UNK]"] = len(vocab)
     vocab["[PAD]"] = len(vocab)
@@ -1014,17 +1029,13 @@ def main(args: argparse.Namespace) -> None:
     dev = dev.filter(has_transcription)
     print("Samples with an empty transcription removed.")
     
+    datasetdict = DatasetDict({"train": train, "dev": dev})
     # Text normalization
     print("Normalizing the text...")
-    # train = train.map(normalize_text,
-    #                   batched=True)
-    train = train.map(normalize_text_official)
-    # dev = dev.map(normalize_text,
-    #               batched=True)
-    dev = dev.map(normalize_text_official)
+    datasetdict.map(normalize_text_official)
+    if args.language == "el-CY":
+        datasetdict.map(normalize_text_greek)
     print("Text normalized.")
-    
-    datasetdict = DatasetDict({"train": train, "dev": dev})
     print(datasetdict) # debug
     
     # Tokenizer/Processor
