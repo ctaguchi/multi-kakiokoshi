@@ -12,8 +12,9 @@ import torch
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 import argparse
+import os
 
-from simple_finetune import get_args
+from simple_finetune import get_args, MODEL_DIR
 
 
 def prepare_dataset(batch,
@@ -103,24 +104,26 @@ if __name__ == "__main__":
                 remove_columns=ds.column_names["train"],
                 num_proc=args.num_proc,
                 fn_kwargs={"processor": processor})
+    
+    output_dir = os.path.join(MODEL_DIR, args.repo_name)
 
     training_args = Seq2SeqTrainingArguments(
-        output_dir="./whisper-small-sco",  # change to a repo name of your choice
-        per_device_train_batch_size=1,
+        output_dir=output_dir,  # change to a repo name of your choice
+        per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=1,  # increase by 2x for every 2x decrease in batch size
-        learning_rate=1e-5,
+        learning_rate=args.learning_rate,
         warmup_steps=100,
         epoch = args.epoch,
         # max_steps=5000,
         gradient_checkpointing=True,
         fp16=True,
         eval_strategy="steps",
-        per_device_eval_batch_size=1,
+        per_device_eval_batch_size=args.eval_batch_size,
         predict_with_generate=True,
         generation_max_length=1000,
-        save_steps=100,
-        eval_steps=100,
-        logging_steps=25,
+        save_steps=args.save_steps,
+        eval_steps=args.eval_steps,
+        logging_steps=args.logging_steps,
         load_best_model_at_end=True,
         metric_for_best_model="wer",
         greater_is_better=False,
