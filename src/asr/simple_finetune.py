@@ -945,12 +945,14 @@ def main(args: argparse.Namespace) -> None:
             max_train = train.map(normalize_text_official,
                                   remove_columns=["segments"])
             max_train = train.filter(is_short_enough, fn_kwargs={"threshold": 120.0}) # discard samples longer than 120 secs
+            print(max_train) # dbeug
         
         if args.train_with_original_only:
             train = max_train
             dev = dev.remove_columns(["segments"])
             dev = dev.filter(is_short_enough)
             print("Original data prepared.")
+            print(train) # debug
             
         else:
             print("Collapsing segments...")
