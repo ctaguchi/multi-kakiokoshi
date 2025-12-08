@@ -322,6 +322,11 @@ def get_args() -> argparse.Namespace:
         help="If set, additional training data from ylacombe/english_dialects will be used for Scots training."
     )
     parser.add_argument(
+        "--use_iswlt_data",
+        action="store_true",
+        help="If set, additional training data from IWSLT Quechua data will be used."
+    )
+    parser.add_argument(
         "--run_original_at_end",
         action="store_true",
         help="If set, training with the original dataset will be run at the end"
@@ -1023,6 +1028,12 @@ def main(args: argparse.Namespace) -> None:
         sco_f = load_dataset("ylacombe/english_dialects", "scottish_female").rename_column("text", "transcription").remove_columns(["line_id", "speaker_id"]).cast_column("audio", Audio(sampling_rate=16000))["train"]
         train = concatenate_datasets([train, sco_m, sco_f])
         print("Additional data from english_dialects loaded and concatenated to the main train set.")
+    
+    if args.use_iwslt_data:
+        assert args.language == "qxp", f"The target language (args.language) needs to be qxp but we got {args.language}"
+        iwslt = load_dataset(f"{USERNAME}/IWSLT_que_data")["train"] # features: ['audio', 'transcription'].
+        train = concatenate_datasets([train, iwslt])
+        print("Additional data from IWSLT Quechua loaded and concatenated to the main train set.")
     
     # Sample cleaning
     train = train.filter(has_transcription)
