@@ -127,7 +127,7 @@ if __name__ == "__main__":
         eval_strategy="steps",
         per_device_eval_batch_size=args.eval_batch_size,
         predict_with_generate=True,
-        generation_max_length=1000,
+        generation_max_length=MAX_LENGTH,
         save_steps=args.save_steps,
         eval_steps=args.eval_steps,
         logging_steps=args.logging_steps,
