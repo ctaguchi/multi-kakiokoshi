@@ -113,7 +113,7 @@ if __name__ == "__main__":
         gradient_accumulation_steps=1,  # increase by 2x for every 2x decrease in batch size
         learning_rate=args.learning_rate,
         warmup_steps=100,
-        epoch = args.epoch,
+        num_train_epochs=args.epoch,
         # max_steps=5000,
         gradient_checkpointing=True,
         fp16=True,
