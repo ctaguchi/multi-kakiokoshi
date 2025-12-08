@@ -13,33 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 import argparse
 
-
-def get_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-m",
-        "--model",
-        type=str,
-        default="openai/whisper-base.en"
-        help="Model."
-    )
-    parser.add_argument(
-        "-l",
-        "--language",
-        type=str,
-        default="sco",
-        help="Target language."
-    )
-    parser.add_argument(
-        "--repo_name",
-        type=str,
-        default="ssc-sco-whisper-base-model-max"
-    )
-    parser.add_argument(
-        "--num_proc",
-        type=int,
-        help="Number of CPU processors."
-    )
+from simple_finetune import get_args
 
 
 def prepare_dataset(batch,
@@ -136,7 +110,8 @@ if __name__ == "__main__":
         gradient_accumulation_steps=1,  # increase by 2x for every 2x decrease in batch size
         learning_rate=1e-5,
         warmup_steps=100,
-        max_steps=5000,
+        epoch = args.epoch,
+        # max_steps=5000,
         gradient_checkpointing=True,
         fp16=True,
         eval_strategy="steps",
