@@ -15,7 +15,7 @@ import argparse
 import os
 import wandb
 
-from simple_finetune import get_args, normalize_text_official, MODEL_DIR
+from simple_finetune import get_args, normalize_text_official, MODEL_DIR, BRACKETED, UNINTELL_PAREN, REPL_PUNC, MULTISPACE
 
 
 MAX_LENGTH = 448 # label sequence length allowed by the model

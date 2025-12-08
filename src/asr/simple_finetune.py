@@ -97,6 +97,12 @@ def get_args() -> argparse.Namespace:
         help="Repo (directory) name to save the model."
     )
     parser.add_argument(
+        "--model_dir",
+        type=str,
+        default=MODEL_DIR,
+        help="Model directory."
+    )
+    parser.add_argument(
         "--force_redownload",
         action="store_true",
         help="If set, the datasets will be forcibly redownloaded (don't use cache)."
@@ -1166,7 +1172,7 @@ def main(args: argparse.Namespace) -> None:
         print("WandB API key not found in the environment.")
         print(e)
         
-    output_dir = os.path.join(MODEL_DIR, args.repo_name)
+    output_dir = os.path.join(args.model_dir, args.repo_name)
     
     wandb.login(key=wandb_api_key)
     run = wandb.init(project=args.wandb_project, name=args.wandb_run_name)
