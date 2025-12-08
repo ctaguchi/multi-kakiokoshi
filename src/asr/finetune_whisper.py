@@ -17,6 +17,9 @@ import os
 from simple_finetune import get_args, MODEL_DIR
 
 
+MAX_LENGTH = 448 # label sequence length allowed by the model
+
+
 def prepare_dataset(batch,
                     processor):
     # load and resample audio data from 48 to 16kHz
@@ -98,8 +101,12 @@ if __name__ == "__main__":
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
     )
-
-    ds = DatasetDict({"train": train, "dev": dev})
+    
+    # max 448 tokens
+    train_clipped = train.filter(lambda x: len(processor.tokenizer(x["transcription"]).input_ids) <= MAX_LENGTH)
+    dev_clipped = dev.filter(lambda x: len(processor.tokenizer(x["transcription"]).input_ids) <= MAX_LENGTH)
+    
+    ds = DatasetDict({"train": train_clipped, "dev": dev_clipped})
     ds = ds.map(prepare_dataset,
                 remove_columns=ds.column_names["train"],
                 num_proc=args.num_proc,
