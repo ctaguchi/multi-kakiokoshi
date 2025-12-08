@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 import argparse
 import os
+import wandb
 
-from simple_finetune import get_args, MODEL_DIR
+from simple_finetune import get_args, normalize_text_official, MODEL_DIR
 
 
 MAX_LENGTH = 448 # label sequence length allowed by the model
@@ -46,8 +47,15 @@ def compute_metrics(pred):
     label_str = processor.tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
     wer = jiwer.wer(label_str, pred_str)
+    cer = jiwer.cer(label_str, pred_str)
+    
+    max_examples_to_log = 10
+    table = wandb.Table(columns=["prediction", "reference"])
+    for p, r in list(zip(pred_str, label_str))[:max_examples_to_log]:
+        table.add_data(p, r)
+    wandb.log({"eval/examples": table})
 
-    return {"wer": wer}
+    return {"cer": cer, "wer": wer}
 
 
 @dataclass
@@ -107,6 +115,7 @@ if __name__ == "__main__":
     dev_clipped = dev.filter(lambda x: len(processor.tokenizer(x["transcription"]).input_ids) <= MAX_LENGTH)
     
     ds = DatasetDict({"train": train_clipped, "dev": dev_clipped})
+    ds = ds.map(normalize_text_official)
     ds = ds.map(prepare_dataset,
                 remove_columns=ds.column_names["train"],
                 num_proc=args.num_proc,
