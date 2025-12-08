@@ -75,7 +75,11 @@ def get_args() -> argparse.Namespace:
         required=True,
         choices=["facebook/mms-1b-all",
                  "facebook/wav2vec2-xls-r-300m",
-                 "facebook/wav2vec2-large-xlsr-53"],
+                 "facebook/wav2vec2-large-xlsr-53",
+                 "openai/whisper-base.en", "openai/whisper-base",
+                 "openai/whisper-small.en", "openai/whisper-small",
+                 "openai/whisper-medium.en", "openai/whisper-medium",
+                 "openai/whisper-large-v2"],
         help="Pretrained model."
     )
     parser.add_argument(
