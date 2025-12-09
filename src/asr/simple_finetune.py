@@ -322,7 +322,7 @@ def get_args() -> argparse.Namespace:
         help="If set, additional training data from ylacombe/english_dialects will be used for Scots training."
     )
     parser.add_argument(
-        "--use_iswlt_data",
+        "--use_iwslt_data",
         action="store_true",
         help="If set, additional training data from IWSLT Quechua data will be used."
     )
