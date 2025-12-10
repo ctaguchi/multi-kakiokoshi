@@ -1066,7 +1066,7 @@ def main(args: argparse.Namespace) -> None:
                                     orthographic=True)
         if args.model == "facebook/mms-1b-all":
             vocab_dict = {args.language: vocab}
-        elif args.model in XLSR_MODELS:
+        elif args.model in XLSR_MODELS + ["facebook/wav2vec2-base"]:
             vocab_dict = vocab
         # save vocab
         model_dir = os.path.join(args.model_dir, args.repo_name)
