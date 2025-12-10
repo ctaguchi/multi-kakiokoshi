@@ -78,7 +78,7 @@ def get_args() -> argparse.Namespace:
                  "facebook/wav2vec2-xls-r-300m",
                  "facebook/wav2vec2-large-xlsr-53",
                  "facebook/wav2vec2-base",
-                 "facebook/wav2vec2-base-960h"
+                 "facebook/wav2vec2-base-960h",
                  "openai/whisper-base.en", "openai/whisper-base",
                  "openai/whisper-small.en", "openai/whisper-small",
                  "openai/whisper-medium.en", "openai/whisper-medium",
