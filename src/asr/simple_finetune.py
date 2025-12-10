@@ -76,6 +76,7 @@ def get_args() -> argparse.Namespace:
         choices=["facebook/mms-1b-all",
                  "facebook/wav2vec2-xls-r-300m",
                  "facebook/wav2vec2-large-xlsr-53",
+                 "facebook/wav2vec2-base",
                  "openai/whisper-base.en", "openai/whisper-base",
                  "openai/whisper-small.en", "openai/whisper-small",
                  "openai/whisper-medium.en", "openai/whisper-medium",
@@ -861,7 +862,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     if args.freeze_feature_encoder:
         if args.model == "facebook/mms-1b-all":
             model.freeze_base_model() # prevents overfitting, faster training
-        elif args.model in XLSR_MODELS:
+        elif args.model in XLSR_MODELS + ["facebook/wav2vec2-base"]:
             model.freeze_feature_encoder()
         
     if args.init_adapter_layer:
@@ -905,9 +906,9 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
         tokenizer=processor.feature_extractor,
     )
     
-    if last_step is not None: # hacky
-        trainer.state.global_step = last_step
-        trainer._globalstep_last_logged = last_step
+    # if last_step is not None: # hacky
+    #     trainer.state.global_step = last_step
+    #     trainer._globalstep_last_logged = last_step
     
     print("Training started.")
     trainer.train()
