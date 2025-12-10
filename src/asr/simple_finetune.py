@@ -858,6 +858,9 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
                     in_features = model.lm_head.in_features
                     model.lm_head = nn.Linear(in_features, new_vocab_size)
                     model.config.vocab_size = new_vocab_size
+                    model.config.pad_token_id = processor.tokenizer.pad_token_id
+                    model.config.bos_token_id = getattr(processor.tokenizer, "bos_token_id", None)
+                    model.config.eos_token_id = getattr(processor.tokenizer, "eos_token_id", None)
                 elif args.init_adapter_layer: # Use the off-the-shelf method of the model
                     assert args.model == "facebook/mms-1b-all"
                     model.init_adapter_layers()
