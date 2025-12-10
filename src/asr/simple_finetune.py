@@ -62,6 +62,7 @@ DISCARDED_COLUMNS = ["client_id", "audio_id", "audio_file", "duration_ms", "prom
                      "prompt", "votes", "age", "gender", "language", "split",
                      "char_per_sec", "quality_tags"]
 XLSR_MODELS = ["facebook/wav2vec2-xls-r-300m", "facebook/wav2vec2-large-xlsr-53"]
+BASE_MODELS = ["facebook/wav2vec2-base", "facebook/wav2vec2-base-960h"]
 Feature = Dict[str, Union[List[int], torch.Tensor]]
 
 
@@ -77,6 +78,7 @@ def get_args() -> argparse.Namespace:
                  "facebook/wav2vec2-xls-r-300m",
                  "facebook/wav2vec2-large-xlsr-53",
                  "facebook/wav2vec2-base",
+                 "facebook/wav2vec2-base-960h"
                  "openai/whisper-base.en", "openai/whisper-base",
                  "openai/whisper-small.en", "openai/whisper-small",
                  "openai/whisper-medium.en", "openai/whisper-medium",
@@ -834,7 +836,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
                                                    ignore_mismatched_sizes=True) # important
             model.load_adapter(args.adapter_lang)
         else:
-            ignore_mismatched_sizes = True if args.model == "facebook/mms-1b-all" else False
+            ignore_mismatched_sizes = True if args.model in {"facebook/mms-1b-all", "facebook/wav2vec2-base-960h"} else False
             new_vocab_size = len(processor.tokenizer)
                 
             model = Wav2Vec2ForCTC.from_pretrained(
@@ -879,7 +881,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
     if args.freeze_feature_encoder:
         if args.model == "facebook/mms-1b-all":
             model.freeze_base_model() # prevents overfitting, faster training
-        elif args.model in XLSR_MODELS + ["facebook/wav2vec2-base"]:
+        elif args.model in XLSR_MODELS + BASE_MODELS:
             model.freeze_feature_encoder()
         
     if args.init_adapter_layer:
@@ -1078,7 +1080,7 @@ def main(args: argparse.Namespace) -> None:
     
     # Tokenizer/Processor
     if args.adapter_lang:
-        assert args.model not in XLSR_MODELS + ["facebook/wav2vec2-base"], "xlsr models do not support adapters."
+        assert args.model not in XLSR_MODELS + BASE_MODELS, "xlsr models do not support adapters."
         print(f"Using the pretrained adapter for {args.adapter_lang}...")
         processor = Wav2Vec2Processor.from_pretrained(args.model)
         processor.tokenizer.set_target_lang(args.adapter_lang)
@@ -1092,7 +1094,7 @@ def main(args: argparse.Namespace) -> None:
                                     orthographic=True)
         if args.model == "facebook/mms-1b-all":
             vocab_dict = {args.language: vocab}
-        elif args.model in XLSR_MODELS + ["facebook/wav2vec2-base"]:
+        elif args.model in XLSR_MODELS + BASE_MODELS:
             vocab_dict = vocab
         # save vocab
         model_dir = os.path.join(args.model_dir, args.repo_name)
@@ -1110,7 +1112,7 @@ def main(args: argparse.Namespace) -> None:
         #     word_delimiter_token="|",
         #     target_lang=args.language
         # )
-        if args.model in XLSR_MODELS + ["facebook/wav2vec2-base"]:
+        if args.model in XLSR_MODELS + BASE_MODELS:
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
                 model_dir,
                 unk_token="[UNK]",
