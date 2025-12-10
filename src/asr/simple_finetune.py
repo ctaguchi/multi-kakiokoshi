@@ -859,6 +859,7 @@ def run_train(mode: Literal["main", "long", "superlong", "maxlong"],
                     model.lm_head = nn.Linear(in_features, new_vocab_size)
                     model.config.vocab_size = new_vocab_size
                 elif args.init_adapter_layer: # Use the off-the-shelf method of the model
+                    assert args.model == "facebook/mms-1b-all"
                     model.init_adapter_layers()
                 else:
                     raise ValueError("Either args.replace_ctc or args.init_adapter_layer must be activated.")
