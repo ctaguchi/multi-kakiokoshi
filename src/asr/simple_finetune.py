@@ -1052,7 +1052,7 @@ def main(args: argparse.Namespace) -> None:
     
     # Tokenizer/Processor
     if args.adapter_lang:
-        assert args.model not in XLSR_MODELS, "xlsr models do not support adapters."
+        assert args.model not in XLSR_MODELS + ["facebook/wav2vec2-base"], "xlsr models do not support adapters."
         print(f"Using the pretrained adapter for {args.adapter_lang}...")
         processor = Wav2Vec2Processor.from_pretrained(args.model)
         processor.tokenizer.set_target_lang(args.adapter_lang)
@@ -1084,7 +1084,7 @@ def main(args: argparse.Namespace) -> None:
         #     word_delimiter_token="|",
         #     target_lang=args.language
         # )
-        if args.model in XLSR_MODELS:
+        if args.model in XLSR_MODELS + ["facebook/wav2vec2-base"]:
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
                 model_dir,
                 unk_token="[UNK]",
