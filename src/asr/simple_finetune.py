@@ -328,6 +328,11 @@ def get_args() -> argparse.Namespace:
         help="If set, additional training data from IWSLT Quechua data will be used."
     )
     parser.add_argument(
+        "--use_long_cv",
+        action="store_true",
+        help="If set, augmented data from Common Voice will be used."
+    )
+    parser.add_argument(
         "--run_original_at_end",
         action="store_true",
         help="If set, training with the original dataset will be run at the end"
@@ -1013,6 +1018,13 @@ def main(args: argparse.Namespace) -> None:
             test_train = Dataset.from_dict(test[threshold:]).cast_column("audio", Audio(sampling_rate=16000))
             test = Dataset.from_dict(test[:threshold]).cast_column("audio", Audio(sampling_rate=16000))
             train = concatenate_datasets([train, dev_train, test_train, other])
+        
+        if args.use_long_cv:
+            # Use augmented data
+            repo_name = f"{USERNAME}/common_voice_{args.language}_aug"
+            aug = load_dataset(repo_name, split="train")
+            aug = aug.map(lambda x: x, remove_columns=["client_id"])
+            train = concatenate_datasets([train, aug])
     
     # Additional training data
     if args.use_jw_data:

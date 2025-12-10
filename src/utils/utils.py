@@ -1,4 +1,4 @@
-from datasets import Dataset, DatasetDict, Audio
+from datasets import Dataset, DatasetDict, Audio, concatenate_datasets
 import torchaudio
 import torch
 # import soundfile as sf
@@ -248,3 +248,177 @@ BETAWI_NUMBERS = {
 BUKUSU_NUMBERS = {
     "2006": "two thousand and six",
 }
+
+
+def concat_with_random_silence(
+    audio_list: List[np.ndarray],
+    sr: int = 16_000,
+    max_silence_sec: float = 1.0,
+    rng: np.random.Generator = None,
+) -> np.ndarray:
+    """
+    Concatenate audio arrays with random silence (0..max_silence_sec) between each.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    chunks = []
+    for i, arr in enumerate(audio_list):
+        arr = arr.astype(np.float32)
+        chunks.append(arr)
+        if i < len(audio_list) - 1:
+            silence_sec = rng.uniform(0.0, max_silence_sec)
+            silence = np.zeros(int(sr * silence_sec), dtype=np.float32)
+            chunks.append(silence)
+
+    return np.concatenate(chunks)
+
+
+from datasets import Dataset
+import numpy as np
+
+def build_augmented_for_client(
+    ds_client: Dataset,
+    text_col: str = "text",
+    target_duration_sec: float = 30.0,
+    sr: int = 16_000,
+    max_silence_sec: float = 1.0,
+    min_segments: int = 2,
+    max_num_sample: int = 20,
+    rng: np.random.Generator = None,
+) -> Dataset:
+    """
+    Create an augmented dataset for a single client_id.
+    Continues creating augmented samples until max_num_sample is reached.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # Randomize sample order
+    indices = np.arange(len(ds_client))
+    rng.shuffle(indices)
+
+    new_audio = []
+    new_texts = []
+    new_client_ids = []
+
+    current_audio_chunks = []
+    current_text_chunks = []
+    current_duration = 0.0
+    current_n_segs = 0
+
+    client_id_value = ds_client[0]["client_id"]
+
+    # Continue looping **until we have enough augmented samples**
+    i = 0
+    while len(new_audio) < max_num_sample:
+        idx = indices[i % len(indices)]     # wrap around for repeated sampling
+        i += 1
+
+        item = ds_client[int(idx)]
+        audio_dict = item["audio"]
+
+        arr = audio_dict["array"]
+        this_sr = audio_dict["sampling_rate"]
+        if this_sr != sr:
+            raise ValueError(f"Sampling rate mismatch: {this_sr} != {sr}")
+
+        dur = len(arr) / sr
+
+        # If adding this would overflow target length and we already have enough segments,
+        # finalize the current sample.
+        if current_n_segs >= min_segments and current_duration + dur > target_duration_sec:
+            concat_audio = concat_with_random_silence(
+                current_audio_chunks,
+                sr=sr,
+                max_silence_sec=max_silence_sec,
+                rng=rng,
+            )
+            concat_text = " ".join(current_text_chunks)
+
+            new_audio.append(concat_audio)
+            new_texts.append(concat_text)
+            new_client_ids.append(client_id_value)
+
+            # Check if we reached target number of augments
+            if len(new_audio) >= max_num_sample:
+                break
+
+            # reset buffers for next augmented sample
+            current_audio_chunks = []
+            current_text_chunks = []
+            current_duration = 0.0
+            current_n_segs = 0
+
+        # Add current segment
+        current_audio_chunks.append(arr)
+        current_text_chunks.append(item[text_col])
+        current_duration += dur
+        current_n_segs += 1
+
+    # Optional: finalize leftover if you want
+    # (only if len(new_audio) < max_num_sample)
+    if (
+        len(new_audio) < max_num_sample
+        and current_n_segs >= min_segments
+    ):
+        concat_audio = concat_with_random_silence(
+            current_audio_chunks,
+            sr=sr,
+            max_silence_sec=max_silence_sec,
+            rng=rng,
+        )
+        concat_text = " ".join(current_text_chunks)
+
+        new_audio.append(concat_audio)
+        new_texts.append(concat_text)
+        new_client_ids.append(client_id_value)
+
+    # Build dataset
+    augmented_ds = Dataset.from_dict(
+        {
+            "audio": new_audio,
+            text_col: new_texts,
+            "client_id": new_client_ids,
+        }
+    )
+
+    return augmented_ds
+
+
+def wrap_audio(example, sr=16000):
+    # example["audio"] is currently a list or np.ndarray
+    arr = np.asarray(example["audio"], dtype=np.float32)
+    return {
+        "audio": {
+            "array": arr,
+            "sampling_rate": sr,
+        }
+    }
+
+
+def build_augmented_cv(ds: Dataset,
+                       target_duration_sec: float = 30.0,
+                       num_proc: int = 4):
+    rng = None
+    client_ids = ds.unique("client_id")
+    augmented_by_client = []
+    for cid in client_ids:
+        ds_client = ds.filter(lambda x, cid=cid: x["client_id"] == cid)
+        aug_client = build_augmented_for_client(
+            ds_client,
+            text_col="transcription",
+            target_duration_sec=target_duration_sec,
+            sr=16_000,
+            max_silence_sec=1.0,
+            min_segments=2,
+            rng=rng,
+        )
+        augmented_by_client.append(aug_client)
+
+    # augmented_ds = concatenate_datasets(augmented_by_client)
+    augmented_ds = concatenate_datasets(augmented_by_client)
+    augmented_ds = augmented_ds.map(wrap_audio,
+                                    num_proc=num_proc)
+    augmented_ds = augmented_ds.cast_column("audio", Audio(sampling_rate=16000))
+    return augmented_ds
