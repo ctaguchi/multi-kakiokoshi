@@ -623,6 +623,18 @@ def normalize_text_greek(batch: Dict[str, Any]) -> Dict[str, Any]:
     return batch
 
 
+def normalize_text_tob(batch: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize Toba Qom ỹ.
+    There seems to be a confusion of
+    - "ỹ" (\u1EF9, a few hits), "ý" (\u00FD, 1052 hits), and "ÿ" (\u00FF, 26 hits)
+    Orthographically it should be ỹ, but they are merged as ý in this task.
+    """
+    t = batch["transcription"]
+    t = t.replace("ỹ", "ý").replace("ÿ", "ý")
+    batch["transcription"] = t
+    return batch
+
+
 def get_vocab_from_dataset(datasetdict: DatasetDict,
                            orthographic: bool = True,
                            language: Optional[str] = None) -> Dict[str, int]:
@@ -1059,6 +1071,8 @@ def main(args: argparse.Namespace) -> None:
     datasetdict.map(normalize_text_official)
     if args.language == "el-CY":
         datasetdict.map(normalize_text_greek)
+    elif args.language == "tob":
+        datasetdict.map(normalize_text_tob)
     print("Text normalized.")
     print(datasetdict) # debug
     
