@@ -344,6 +344,11 @@ def get_args() -> argparse.Namespace:
         action="store_true",
         help="If set, train the model with the original audio only."
     )
+    parser.add_argument(
+        "--use_dev",
+        action="store_true",
+        help="If set, dev data will be fed into training. Note that the eval loss and eval CER/WER will be small but that doesn't indicate the true ASR inference performance."
+    )
     
     return parser.parse_args()
 
@@ -632,7 +637,7 @@ def normalize_text_tob(batch: Dict[str, Any]) -> Dict[str, Any]:
     Orthographically it should be ỹ, but they are merged as ý in this task.
     """
     t = batch["transcription"]
-    t = t.replace("ỹ", "ý").replace("ÿ", "ý")
+    t = t.replace("ỹ", "ý").replace("ÿ", "ý").replace("ʼ", "'")
     batch["transcription"] = t
     return batch
 
@@ -981,6 +986,13 @@ def main(args: argparse.Namespace) -> None:
             # long_train = long_train.map(normalize_text,
             #                             batched=True)
             long_train = long_train.map(normalize_text_official)
+            
+            if args.use_dev:
+                long_dev_train = combine_segments_in_dataset(
+                    dataset=dev,
+                    combine_last=True,
+                    min_length=5
+                )
         # Superlong version
         if args.train_with_superlong_samples:
             superlong_train = combine_segments_in_dataset(
@@ -993,6 +1005,13 @@ def main(args: argparse.Namespace) -> None:
             # superlong_train = superlong_train.map(normalize_text,
             #                                       batched=True)
             superlong_train = superlong_train.map(normalize_text_official)
+            
+            if args.use_dev:
+                superlong_dev_train = combine_segments_in_dataset(
+                    dataset=dev,
+                    combine_last=True,
+                    min_length=10
+                )
         # Max long version
         if args.train_with_maxlong_samples: # original length; this'll be a MUST because the dev set is case-sensitive
             max_train = train.filter(has_transcription)
@@ -1000,8 +1019,16 @@ def main(args: argparse.Namespace) -> None:
                                   remove_columns=["segments"])
             max_train = max_train.filter(is_short_enough, fn_kwargs={"threshold": 120.0}) # discard samples longer than 120 secs
             print(max_train) # dbeug
+            
+            if args.use_dev:
+                max_dev_train = dev.filter(has_transcription)
+                max_dev_train = max_dev_train.map(normalize_text_official,
+                                                  remove_columns=["segments"])
+                max_dev_train = max_dev_train.filter(is_short_enough, fn_kwargs={"threshold": 120.0})
         
         if args.train_with_original_only:
+            assert not args.use_dev
+            
             train = max_train
             dev = dev.remove_columns(["segments"])
             dev = dev.filter(is_short_enough)
@@ -1017,15 +1044,32 @@ def main(args: argparse.Namespace) -> None:
                             remove_columns=train.column_names) # should take about 5 mins, and the memory should be ok within 12.7GB
             train = train.filter(is_long_enough)
             print("Segments that are too short have been removed.")
-            # The total number of samples can reach around 10k
+            
+            if args.use_dev:
+                print("Using the dev data in traning. Collapsing segments...")
+                dev_train = dev.map(batch_collapse_segments,
+                              batched=True,
+                              batch_size=16,
+                              num_proc=4,
+                              remove_columns=dev.column_names)
+                dev_train = dev_train.filter(is_long_enough)
+                print("Segments that are too short have been removed from dev_train.")
+            print("Segments collapsed.")
+            
+            # The total number of samples can reach around 10k (without dev)
             dev = dev.map(lambda x: x,
                           remove_columns=["segments"]) # we are not using segments for dev data
             dev = dev.filter(is_short_enough)
-            print("Segments collapsed.")
+            
     
     elif args.language in CVLangs:
+        assert not args.train_with_longer_samples
+        assert not args.train_with_superlong_samples
+        assert not args.train_with_maxlong_samples
+        
         train = datasetdict["train"] # kbd CV data contains JW data by default
         dev = datasetdict["dev"]
+        
         if args.maximize_training_data:
             # just leave 1000 samples for dev and test
             threshold = min(1000, int(len(dev) * 0.5))
@@ -1043,6 +1087,13 @@ def main(args: argparse.Namespace) -> None:
             aug = load_dataset(repo_name, split="train")
             aug = aug.map(lambda x: x, remove_columns=["client_id"])
             train = concatenate_datasets([train, aug])
+        
+        if args.use_dev:
+            dev_train = dev
+            dev_train = dev_train.filter(has_transcription)
+    
+    else: # unknown language
+        raise ValueError(f"Unsupported language: {args.language}")
     
     # Additional training data
     if args.use_jw_data:
@@ -1074,11 +1125,18 @@ def main(args: argparse.Namespace) -> None:
     datasetdict = DatasetDict({"train": train, "dev": dev})
     # Text normalization
     print("Normalizing the text...")
-    datasetdict.map(normalize_text_official)
+    datasetdict = datasetdict.map(normalize_text_official)
     if args.language == "el-CY":
-        datasetdict.map(normalize_text_greek)
+        datasetdict = datasetdict.map(normalize_text_greek)
     elif args.language == "tob":
-        datasetdict.map(normalize_text_tob)
+        datasetdict = datasetdict.map(normalize_text_tob)
+    
+    if args.use_dev:
+        dev_train = dev_train.map(normalize_text_official)
+        if args.language == "el-CY":
+            dev_train = dev_train.map(normalize_text_greek)
+        elif args.language == "tob":
+            dev_train = dev_train.map(normalize_text_tob)
     print("Text normalized.")
     print(datasetdict) # debug
     
@@ -1176,30 +1234,58 @@ def main(args: argparse.Namespace) -> None:
                                 fn_kwargs={"augmentor": augmentor,
                                             "processor": processor},
                                 remove_columns=datasetdict["train"].column_names)
+    if args.use_dev:
+        dev_train = dev_train.map(prepare_dataset,
+                                  fn_kwargs={"augmentor": augmentor,
+                                             "processor": processor},
+                                  remove_columns=dev_train.column_names)
+        datasetdict["train"] = concatenate_datasets([datasetdict["train"], dev_train])
     print("Main dataset prepared.")
     if args.train_with_longer_samples:
         long_train = long_train.map(prepare_dataset,
                                     fn_kwargs={"augmentor": augmentor,
                                                "processor": processor},
                                     remove_columns=long_train.column_names)
+        if args.use_dev:
+            long_dev_train = long_dev_train.map(prepare_dataset,
+                                                fn_kwargs={"augmentor": augmentor,
+                                                           "processor": processor},
+                                                remove_columns=long_dev_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], long_train])
+            if args.use_dev:
+                datasetdict["train"] = concatenate_datasets([datasetdict["train"], long_dev_train])
+            
         print("Long-segment dataset prepared.")
     if args.train_with_superlong_samples:
         superlong_train = superlong_train.map(prepare_dataset,
                                               fn_kwargs={"augmentor": augmentor,
                                                          "processor": processor},
                                               remove_columns=superlong_train.column_names)
+        if args.use_dev:
+            superlong_dev_train = superlong_dev_train.map(prepare_dataset,
+                                                          fn_kwargs={"augmentor": augmentor,
+                                                                     "processor": processor},
+                                                          remove_columns=superlong_dev_train.column_names)
         if args.mix_long_short:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], superlong_train])
+            if args.use_dev:
+                datasetdict["train"] = concatenate_datasets([datasetdict["train"], superlong_dev_train])
         print("Super-long-segment dataset prepared.")
     if args.train_with_maxlong_samples and not args.train_with_original_only:
         max_train = max_train.map(prepare_dataset,
                                   fn_kwargs={"augmentor": augmentor,
                                                          "processor": processor},
                                               remove_columns=max_train.column_names)
+        if args.use_dev:
+            max_dev_train = max_dev_train.map(prepare_dataset,
+                                              fn_kwargs={"augmentor": augmentor,
+                                                         "processor": processor},
+                                              remove_columns=max_dev_train.column_names)
         if args.mix_long_short and not args.run_original_at_end:
             datasetdict["train"] = concatenate_datasets([datasetdict["train"], max_train])
+            if args.use_dev:
+                datasetdict["train"] = concatenate_datasets([datasetdict["train"], max_dev_train])
         print("Max-long-segment dataset prepared.")
     print("Dataset formatted.")
     
@@ -1262,7 +1348,7 @@ def main(args: argparse.Namespace) -> None:
     if args.train_with_superlong_samples and not args.mix_long_short:
         print("Starting the training with the superlong dataset.")
         run_train(mode="superlong",
-              train_dataset=long_train,
+              train_dataset=superlong_train,
               eval_dataset=datasetdict["dev"],
               data_collator=data_collator,
               compute_metrics=compute_metrics,
